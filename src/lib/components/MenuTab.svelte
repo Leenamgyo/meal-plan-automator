@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { hangulIncludes } from "$lib/hangul";
 
     interface MenuItem {
         id: string;
@@ -8,7 +9,9 @@
     }
 
     let menuItems: MenuItem[] = [];
-    let searchQuery = "";
+    let searchInput = "";
+    let debouncedQuery = "";
+    let searchTimer: ReturnType<typeof setTimeout>;
     let activeFilters: string[] = [];
     let newMenuName = "";
     let newTagInput = "";
@@ -17,15 +20,27 @@
     let showMenuSuggestions = false;
     let confirmDelete = true;
 
+    // Edit mode
+    let editingId: string | null = null;
+    let editName = "";
+    let editTagInput = "";
+    let editTags: string[] = [];
+
     $: allTags = [...new Set(menuItems.flatMap((item) => item.tags))].sort();
+
+    $: {
+        clearTimeout(searchTimer);
+        const q = searchInput;
+        searchTimer = setTimeout(() => {
+            debouncedQuery = q;
+        }, 100);
+    }
 
     $: filteredItems = menuItems.filter((item) => {
         const matchSearch =
-            !searchQuery ||
-            item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.tags.some((t) =>
-                t.toLowerCase().includes(searchQuery.toLowerCase()),
-            );
+            !debouncedQuery ||
+            hangulIncludes(item.name, debouncedQuery) ||
+            item.tags.some((t) => hangulIncludes(t, debouncedQuery));
         const matchFilter =
             activeFilters.length === 0 ||
             activeFilters.every((f) => item.tags.includes(f));
@@ -35,17 +50,12 @@
     $: tagSuggestions = allTags.filter(
         (t) =>
             !pendingTags.includes(t) &&
-            (!newTagInput ||
-                t.toLowerCase().includes(newTagInput.toLowerCase())),
+            (!newTagInput || hangulIncludes(t, newTagInput)),
     );
 
     $: menuNameSuggestions = newMenuName.trim()
         ? menuItems
-              .filter((m) =>
-                  m.name
-                      .toLowerCase()
-                      .includes(newMenuName.trim().toLowerCase()),
-              )
+              .filter((m) => hangulIncludes(m.name, newMenuName.trim()))
               .slice(0, 5)
         : [];
 
@@ -87,7 +97,64 @@
             if (!confirm(`"${item?.name}" 메뉴를 삭제하시겠습니까?`)) return;
         }
         menuItems = menuItems.filter((m) => m.id !== id);
+        if (editingId === id) editingId = null;
         saveMenuItems();
+    }
+
+    function startEdit(item: MenuItem) {
+        editingId = item.id;
+        editName = item.name;
+        editTags = [...item.tags];
+        editTagInput = "";
+    }
+
+    function cancelEdit() {
+        editingId = null;
+        editName = "";
+        editTags = [];
+        editTagInput = "";
+    }
+
+    function saveEdit() {
+        if (!editingId || !editName.trim()) return;
+        menuItems = menuItems.map((m) => {
+            if (m.id === editingId)
+                return { ...m, name: editName.trim(), tags: [...editTags] };
+            return m;
+        });
+        editingId = null;
+        editName = "";
+        editTags = [];
+        editTagInput = "";
+        saveMenuItems();
+    }
+
+    function addEditTag() {
+        const tag = editTagInput.trim();
+        if (!tag || editTags.includes(tag)) return;
+        editTags = [...editTags, tag];
+        editTagInput = "";
+    }
+
+    function removeEditTag(tag: string) {
+        editTags = editTags.filter((t) => t !== tag);
+    }
+
+    function handleEditTagKeydown(e: KeyboardEvent) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addEditTag();
+        }
+    }
+
+    function handleEditNameKeydown(e: KeyboardEvent) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            saveEdit();
+        }
+        if (e.key === "Escape") {
+            cancelEdit();
+        }
     }
 
     function addPendingTag() {
@@ -116,7 +183,8 @@
 
     function clearFilters() {
         activeFilters = [];
-        searchQuery = "";
+        searchInput = "";
+        debouncedQuery = "";
     }
 
     function handleTagKeydown(e: KeyboardEvent) {
@@ -151,19 +219,88 @@
                 </div>
             {:else}
                 {#each filteredItems as item (item.id)}
-                    <div class="menu-row">
-                        <span class="menu-name">{item.name}</span>
-                        <div class="menu-tags">
-                            {#each item.tags as tag}
-                                <span class="tag-chip">{tag}</span>
-                            {/each}
+                    {#if editingId === item.id}
+                        <div class="menu-row editing">
+                            <div class="edit-form">
+                                <input
+                                    type="text"
+                                    class="edit-name-input"
+                                    bind:value={editName}
+                                    on:keydown={handleEditNameKeydown}
+                                    placeholder="메뉴 이름"
+                                />
+                                <div class="edit-tags-row">
+                                    {#each editTags as tag}
+                                        <span class="tag-chip pending">
+                                            {tag}
+                                            <button
+                                                class="tag-remove"
+                                                on:click={() =>
+                                                    removeEditTag(tag)}
+                                                aria-label="{tag} 제거"
+                                                >×</button
+                                            >
+                                        </span>
+                                    {/each}
+                                    <input
+                                        type="text"
+                                        class="edit-tag-input"
+                                        placeholder="태그 추가"
+                                        bind:value={editTagInput}
+                                        on:keydown={handleEditTagKeydown}
+                                    />
+                                </div>
+                                <div class="edit-actions">
+                                    <button
+                                        class="btn-edit-save"
+                                        on:click={saveEdit}>저장</button
+                                    >
+                                    <button
+                                        class="btn-edit-cancel"
+                                        on:click={cancelEdit}>취소</button
+                                    >
+                                </div>
+                            </div>
                         </div>
-                        <button
-                            class="btn-remove-menu"
-                            on:click={() => removeMenu(item.id)}
-                            aria-label="{item.name} 삭제">×</button
-                        >
-                    </div>
+                    {:else}
+                        <div class="menu-row">
+                            <button
+                                class="btn-edit-menu"
+                                on:click={() => startEdit(item)}
+                                aria-label="{item.name} 수정"
+                                title="수정"
+                            >
+                                <svg
+                                    width="13"
+                                    height="13"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path
+                                        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                                    ></path>
+                                    <path
+                                        d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                                    ></path>
+                                </svg>
+                            </button>
+                            <span class="menu-name">{item.name}</span>
+                            <div class="menu-tags">
+                                {#each item.tags as tag}
+                                    <span class="tag-chip">{tag}</span>
+                                {/each}
+                            </div>
+                            <button
+                                class="btn-remove-menu"
+                                on:click={() => removeMenu(item.id)}
+                                aria-label="{item.name} 삭제">×</button
+                            >
+                        </div>
+                    {/if}
                 {/each}
             {/if}
             <div class="menu-count">
@@ -193,9 +330,9 @@
                     type="text"
                     class="search-input"
                     placeholder="메뉴 또는 태그 검색..."
-                    bind:value={searchQuery}
+                    bind:value={searchInput}
                 />
-                {#if searchQuery || activeFilters.length > 0}
+                {#if searchInput || activeFilters.length > 0}
                     <button
                         class="btn-clear-search"
                         on:click={clearFilters}

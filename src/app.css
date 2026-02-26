@@ -855,6 +855,102 @@ textarea.mac-textarea:focus {
     cursor: not-allowed;
 }
 
+/* Edit Mode */
+.btn-edit-menu {
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    transition: color 0.15s;
+}
+
+.btn-edit-menu:hover {
+    color: var(--mac-accent);
+}
+
+.menu-row.editing {
+    background: #f8faff;
+    border: 1px solid #d0ddf0;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.edit-name-input {
+    padding: 6px 10px;
+    border: 1px solid var(--mac-border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.edit-name-input:focus {
+    border-color: var(--mac-accent);
+}
+
+.edit-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.edit-tag-input {
+    border: 1px solid var(--mac-border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.8rem;
+    width: 80px;
+    outline: none;
+}
+
+.edit-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.btn-edit-save {
+    padding: 4px 14px;
+    background: var(--mac-accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.btn-edit-save:hover {
+    opacity: 0.9;
+}
+
+.btn-edit-cancel {
+    padding: 4px 14px;
+    background: #eee;
+    color: #666;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.btn-edit-cancel:hover {
+    background: #ddd;
+}
+
+}
+
 /* Meal Schedule (식단표) Styles */
 .meal-schedule {
     flex: 1;
@@ -967,12 +1063,13 @@ textarea.mac-textarea:focus {
     border: 1px solid #e8eaed;
 }
 
-.sch-cell.empty {
-    background: #f8f8f8;
-    border-color: transparent;
+.sch-cell.other-month {
+    background: #fafafa;
+    border-color: #f0f0f0;
+    opacity: 0.4;
 }
 
-.sch-cell:not(.empty):hover {
+.sch-cell:not(.other-month):hover {
     background: #fafbff;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
     border-color: #ccd5e0;

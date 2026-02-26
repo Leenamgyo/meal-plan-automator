@@ -1,7 +1,11 @@
 <script lang="ts">
     import { onMount } from "svelte";
 
-    // 날짜별 중식 메뉴 목록 (최대 9개 정도)
+    interface CalendarDay {
+        day: number;
+        isOtherMonth: boolean;
+    }
+
     let currentDate = new Date();
     let mealData: Record<string, string[]> = {};
 
@@ -14,13 +18,23 @@
 
     $: daysInMonth = new Date(year, month + 1, 0).getDate();
     $: firstDayOfWeek = new Date(year, month, 1).getDay();
+    $: prevMonthDays = new Date(year, month, 0).getDate();
 
     $: calendarDays = (() => {
-        const days: (number | null)[] = [];
-        for (let i = 0; i < firstDayOfWeek; i++) days.push(null);
-        for (let d = 1; d <= daysInMonth; d++) days.push(d);
-        // 마지막 행 패딩
-        while (days.length % 7 !== 0) days.push(null);
+        const days: CalendarDay[] = [];
+        // 이전 달 날짜
+        for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+            days.push({ day: prevMonthDays - i, isOtherMonth: true });
+        }
+        // 이번 달 날짜
+        for (let d = 1; d <= daysInMonth; d++) {
+            days.push({ day: d, isOtherMonth: false });
+        }
+        // 다음 달 날짜
+        let nextDay = 1;
+        while (days.length % 7 !== 0) {
+            days.push({ day: nextDay++, isOtherMonth: true });
+        }
         return days;
     })();
 
@@ -37,18 +51,18 @@
         return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     }
 
-    function getMenus(day: number | null): string[] {
-        if (!day) return [];
-        return mealData[dateKey(day)] || [];
+    function getMenus(cd: CalendarDay): string[] {
+        if (cd.isOtherMonth) return [];
+        return mealData[dateKey(cd.day)] || [];
     }
 
-    function isToday(day: number | null): boolean {
-        if (!day) return false;
+    function isToday(cd: CalendarDay): boolean {
+        if (cd.isOtherMonth) return false;
         const today = new Date();
         return (
             today.getFullYear() === year &&
             today.getMonth() === month &&
-            today.getDate() === day
+            today.getDate() === cd.day
         );
     }
 
@@ -68,7 +82,6 @@
 </script>
 
 <div class="meal-schedule">
-    <!-- Header -->
     <div class="schedule-header">
         <div class="schedule-nav">
             <button
@@ -86,7 +99,6 @@
         <button class="btn-today" on:click={goToday}>오늘</button>
     </div>
 
-    <!-- Weekday Row -->
     <div class="sch-weekdays">
         {#each weekDays as wd, i}
             <div class="sch-wd" class:sun={i === 0} class:sat={i === 6}>
@@ -95,24 +107,23 @@
         {/each}
     </div>
 
-    <!-- Grid -->
     <div class="sch-grid" style="--rows: {totalRows};">
-        {#each calendarDays as day, idx}
+        {#each calendarDays as cd, idx}
             <div
                 class="sch-cell"
-                class:empty={day === null}
-                class:today={isToday(day)}
+                class:other-month={cd.isOtherMonth}
+                class:today={isToday(cd)}
                 class:weekend={isWeekend(idx)}
             >
-                {#if day !== null}
-                    <div
-                        class="cell-day"
-                        class:sun={idx % 7 === 0}
-                        class:sat={idx % 7 === 6}
-                    >
-                        {day}
-                    </div>
-                    {@const menus = getMenus(day)}
+                <div
+                    class="cell-day"
+                    class:sun={idx % 7 === 0}
+                    class:sat={idx % 7 === 6}
+                >
+                    {cd.day}
+                </div>
+                {#if !cd.isOtherMonth}
+                    {@const menus = getMenus(cd)}
                     {#if menus.length > 0}
                         <ul class="cell-menu-list">
                             {#each menus as menu}
