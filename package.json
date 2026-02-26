@@ -3,11 +3,12 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "main": "main.cjs",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && sed -i '' 's/\"\\/_app/\"\\.\\/_app/g' build/index.html && sed -i '' 's/href=\"\\/_app/href=\"\\.\\/_app/g' build/index.html",
     "preview": "vite preview",
-    "start": "electron .",
+    "start": "npm run build && electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -22,5 +23,8 @@
     "svelte-check": "^4.3.6",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1"
   }
 }

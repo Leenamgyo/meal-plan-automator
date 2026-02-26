@@ -3,20 +3,22 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-	// Consult https://svelte.dev/docs/kit/integrations
-	// for more information about preprocessors
 	preprocess: vitePreprocess(),
 
 	kit: {
-		// adapter-static only:
-		// strict: false is required if not all routes are pre-rendered
 		adapter: adapter({
 			pages: 'build',
 			assets: 'build',
 			fallback: 'index.html',
 			precompress: false,
-			strict: true
-		})
+			strict: false
+		}),
+		paths: {
+			relative: true
+		},
+		prerender: {
+			handleHttpError: 'warn'
+		}
 	}
 };
 
