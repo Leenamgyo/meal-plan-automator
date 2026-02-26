@@ -1,0 +1,285 @@
+:root {
+    --mac-bg: #ececec;
+    --mac-border: #c8c8c8;
+    --mac-text: #2c2c2c;
+    --mac-tab-active: #ffffff;
+    --mac-tab-inactive: #e0e0e0;
+    --mac-accent: #007aff;
+    --mac-sidebar: #f5f5f7;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--mac-bg);
+    color: var(--mac-text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    user-select: none;
+}
+
+/* macOS Title / Tab Bar */
+header {
+    background-color: var(--mac-bg);
+    border-bottom: 1px solid var(--mac-border);
+    display: flex;
+    align-items: flex-end;
+    padding-left: 80px;
+    /* Space for traffic lights */
+    height: 52px;
+    -webkit-app-region: drag;
+    position: relative;
+}
+
+/* macOS Traffic Lights (Mock) */
+.mac-traffic-lights {
+    position: absolute;
+    left: 16px;
+    top: 18px;
+    display: flex;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+}
+
+.traffic-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.tl-red {
+    background-color: #ff5f56;
+    border: 1px solid #e0443e;
+}
+
+.tl-yellow {
+    background-color: #ffbd2e;
+    border: 1px solid #dea123;
+}
+
+.tl-green {
+    background-color: #27c93f;
+    border: 1px solid #1aab29;
+}
+
+.tabs {
+    display: flex;
+    gap: 0px;
+    height: 36px;
+    -webkit-app-region: no-drag;
+}
+
+.tab-btn {
+    background: var(--mac-tab-inactive);
+    border: 1px solid var(--mac-border);
+    border-bottom: none;
+    color: #555;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0 16px;
+    border-radius: 8px 8px 0 0;
+    margin-right: -1px;
+    /* Overlap borders */
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s;
+    position: relative;
+    z-index: 1;
+    min-width: 120px;
+}
+
+.tab-btn:hover {
+    background-color: #eaeaea;
+}
+
+.tab-btn.active {
+    background-color: var(--mac-tab-active);
+    color: var(--mac-text);
+    z-index: 2;
+    box-shadow: 0 2px 0 var(--mac-tab-active);
+    /* Cover bottom border */
+}
+
+/* Main App Area */
+main {
+    flex: 1;
+    display: flex;
+    background-color: var(--mac-tab-active);
+    overflow: hidden;
+}
+
+.tab-content {
+    display: none;
+    width: 100%;
+    height: 100%;
+}
+
+.tab-content.active {
+    display: flex;
+    /* Using flex for split layout */
+}
+
+/* Split Layout for Main Tab */
+.sidebar {
+    width: 250px;
+    background-color: var(--mac-sidebar);
+    border-right: 1px solid var(--mac-border);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.content-area {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-item {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #444;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s;
+}
+
+.sidebar-item:hover {
+    background-color: #e5e5ea;
+}
+
+.sidebar-item.selected {
+    background-color: #007aff;
+    color: white;
+    font-weight: 500;
+}
+
+/* Typography & Components in Content Area */
+h2 {
+    font-size: 1.5rem;
+    color: var(--mac-text);
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--mac-border);
+    padding-bottom: 1rem;
+}
+
+/* Settings Form */
+.settings-container {
+    max-width: 600px;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 6px;
+}
+
+.form-group input {
+    padding: 8px 12px;
+    border: 1px solid var(--mac-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    outline: none;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
+    -webkit-appearance: none;
+}
+
+.form-group input:focus {
+    border-color: #007aff;
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+}
+
+.btn-mac {
+    background-color: #007aff;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    align-self: flex-start;
+}
+
+.btn-mac:hover {
+    background-color: #006ae6;
+}
+
+.btn-mac:active {
+    background-color: #005cc9;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Status & Toolbars */
+.action-toolbar {
+    background: #fdfdfd;
+    border: 1px solid var(--mac-border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.input-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100%;
+}
+
+textarea.mac-textarea {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid var(--mac-border);
+    border-radius: 8px;
+    resize: none;
+    font-family: inherit;
+    font-size: 0.95rem;
+    outline: none;
+    box-sizing: border-box;
+}
+
+textarea.mac-textarea:focus {
+    border-color: #007aff;
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+}
+
+.version-footer {
+    margin-top: auto;
+    padding: 1rem;
+    text-align: right;
+    font-size: 0.75rem;
+    color: #999;
+}
