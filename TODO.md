@@ -14,9 +14,9 @@
 - [X] 달력 필터/검색 기능 추가
 - [X] 메뉴 관리 그리드 카드 레이아웃
 - [X] Supabase 코드 제거
-- [X] PocketBase 연동 (pocketbase.ts + 컴포넌트 CRUD 연동 + localStorage fallback)
-- [X] PocketBase seed 스크립트 (삭제 후 200개 메뉴 생성)
-- [X] README.md 업데이트 (PB 설정 가이드 포함)
+- [X] 앱 로컬 SQLite 연동 (better-sqlite3 + 컴포넌트 CRUD 연동 + localStorage fallback)
+- [X] SQLite seed 스크립트 (삭제 후 200개 메뉴 생성)
+- [X] README.md 업데이트 (SQLite 설정 가이드 변경)
 
 ## 📋 예정
 - [ ] 식단 등록을 AI가 알아서 등록해줄 수 있음 (메뉴 관리에 있는 애들만)
