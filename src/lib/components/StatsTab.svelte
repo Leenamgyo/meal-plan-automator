@@ -1,28 +1,41 @@
 <script lang="ts">
     import { onMount } from "svelte";
 
+    interface Category {
+        id: string;
+        name: string;
+        color: string;
+    }
+
     interface MenuItem {
         id: string;
         name: string;
-        tags: string[];
+        category: string;
+        ingredients: string[];
     }
 
     let menuItems: MenuItem[] = [];
+    let categories: Category[] = [];
 
     onMount(() => {
+        const savedCats = localStorage.getItem("menuCategories");
+        if (savedCats) categories = JSON.parse(savedCats);
+
         const saved = localStorage.getItem("menuItems");
         if (saved) menuItems = JSON.parse(saved);
     });
 
     $: totalMenus = menuItems.length;
-    $: allTags = [...new Set(menuItems.flatMap((m) => m.tags))];
-    $: totalTags = allTags.length;
+    $: allIngredients = [
+        ...new Set(menuItems.flatMap((m) => m.ingredients || [])),
+    ];
+    $: totalIngredients = allIngredients.length;
 
-    // Tag frequency (top 10)
-    $: tagFrequency = (() => {
+    // Ingredient frequency (top 10)
+    $: ingredientFrequency = (() => {
         const freq: Record<string, number> = {};
         menuItems.forEach((m) =>
-            m.tags.forEach((t) => {
+            (m.ingredients || []).forEach((t) => {
                 freq[t] = (freq[t] || 0) + 1;
             }),
         );
@@ -31,10 +44,12 @@
             .slice(0, 10);
     })();
 
-    $: maxFreq = tagFrequency.length > 0 ? tagFrequency[0][1] : 1;
+    $: maxFreq = ingredientFrequency.length > 0 ? ingredientFrequency[0][1] : 1;
 
-    // Menus without tags
-    $: untaggedMenus = menuItems.filter((m) => m.tags.length === 0);
+    // Menus without ingredients
+    $: noIngredientMenus = menuItems.filter(
+        (m) => !m.ingredients || m.ingredients.length === 0,
+    );
 </script>
 
 <div class="stats-tab">
@@ -45,29 +60,30 @@
             <div class="stat-label">전체 메뉴</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number">{totalTags}</div>
-            <div class="stat-label">태그 종류</div>
+            <div class="stat-number">{totalIngredients}</div>
+            <div class="stat-label">등록된 재료 수</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number">{untaggedMenus.length}</div>
-            <div class="stat-label">미분류 메뉴</div>
+            <div class="stat-number">{noIngredientMenus.length}</div>
+            <div class="stat-label">재료 미지정 메뉴</div>
         </div>
     </div>
 
-    <!-- Tag Frequency Chart -->
+    <!-- Ingredient Frequency Chart -->
     <div class="stats-section">
-        <h3 class="stats-section-title">📊 태그별 메뉴 수 (상위 10개)</h3>
-        {#if tagFrequency.length === 0}
+        <h3 class="stats-section-title">📊 재료별 사용 빈도 (상위 10개)</h3>
+        {#if ingredientFrequency.length === 0}
             <div class="empty-state"><p>아직 데이터가 없습니다.</p></div>
         {:else}
             <div class="bar-chart">
-                {#each tagFrequency as [tag, count]}
+                {#each ingredientFrequency as [ing, count]}
                     <div class="bar-row">
-                        <span class="bar-label">{tag}</span>
+                        <span class="bar-label">{ing}</span>
                         <div class="bar-track">
                             <div
                                 class="bar-fill"
-                                style="width: {(count / maxFreq) * 100}%;"
+                                style="width: {(count / maxFreq) *
+                                    100}%; background: linear-gradient(90deg, #20c997, #12b886);"
                             ></div>
                         </div>
                         <span class="bar-value">{count}</span>
@@ -78,11 +94,11 @@
     </div>
 
     <!-- Untagged Menus -->
-    {#if untaggedMenus.length > 0}
+    {#if noIngredientMenus.length > 0}
         <div class="stats-section">
-            <h3 class="stats-section-title">⚠️ 태그 미지정 메뉴</h3>
+            <h3 class="stats-section-title">⚠️ 재료 미지정 메뉴</h3>
             <div class="untagged-list">
-                {#each untaggedMenus as item}
+                {#each noIngredientMenus as item}
                     <span class="untagged-item">{item.name}</span>
                 {/each}
             </div>

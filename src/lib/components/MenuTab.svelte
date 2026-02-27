@@ -2,31 +2,44 @@
     import { onMount } from "svelte";
     import { hangulIncludes } from "$lib/hangul";
 
+    interface Category {
+        id: string;
+        name: string;
+        color: string;
+    }
+
     interface MenuItem {
         id: string;
         name: string;
-        tags: string[];
+        category: string;
+        ingredients: string[];
     }
 
     let menuItems: MenuItem[] = [];
+    let categories: Category[] = [];
     let searchInput = "";
     let debouncedQuery = "";
     let searchTimer: ReturnType<typeof setTimeout>;
-    let activeFilters: string[] = [];
+    let activeFilters: string[] = []; // Ingredient filters
+    let activeCategoryFilter: string | null = null;
     let newMenuName = "";
-    let newTagInput = "";
-    let pendingTags: string[] = [];
-    let showTagSuggestions = false;
+    let newCategory = "";
+    let newIngredientInput = "";
+    let pendingIngredients: string[] = [];
+    let showIngredientSuggestions = false;
     let showMenuSuggestions = false;
     let confirmDelete = true;
 
     // Edit mode
     let editingId: string | null = null;
     let editName = "";
-    let editTagInput = "";
-    let editTags: string[] = [];
+    let editCategory = "";
+    let editIngredientInput = "";
+    let editIngredients: string[] = [];
 
-    $: allTags = [...new Set(menuItems.flatMap((item) => item.tags))].sort();
+    $: allIngredients = [
+        ...new Set(menuItems.flatMap((item) => item.ingredients || [])),
+    ].sort();
 
     $: {
         clearTimeout(searchTimer);
@@ -37,20 +50,32 @@
     }
 
     $: filteredItems = menuItems.filter((item) => {
+        const catName =
+            categories.find((c) => c.id === item.category)?.name ||
+            item.category ||
+            "";
         const matchSearch =
             !debouncedQuery ||
             hangulIncludes(item.name, debouncedQuery) ||
-            item.tags.some((t) => hangulIncludes(t, debouncedQuery));
+            hangulIncludes(catName, debouncedQuery) ||
+            (item.ingredients || []).some((t) =>
+                hangulIncludes(t, debouncedQuery),
+            );
+
         const matchFilter =
             activeFilters.length === 0 ||
-            activeFilters.every((f) => item.tags.includes(f));
-        return matchSearch && matchFilter;
+            activeFilters.every((f) => (item.ingredients || []).includes(f));
+
+        const matchCatFilter =
+            !activeCategoryFilter || item.category === activeCategoryFilter;
+
+        return matchSearch && matchFilter && matchCatFilter;
     });
 
-    $: tagSuggestions = allTags.filter(
+    $: ingredientSuggestions = allIngredients.filter(
         (t) =>
-            !pendingTags.includes(t) &&
-            (!newTagInput || hangulIncludes(t, newTagInput)),
+            !pendingIngredients.includes(t) &&
+            (!newIngredientInput || hangulIncludes(t, newIngredientInput)),
     );
 
     $: menuNameSuggestions = newMenuName.trim()
@@ -66,11 +91,50 @@
         : false;
 
     onMount(() => {
+        const savedCats = localStorage.getItem("menuCategories");
+        if (savedCats) {
+            categories = JSON.parse(savedCats);
+        }
+
         const saved = localStorage.getItem("menuItems");
-        if (saved) menuItems = JSON.parse(saved);
+        if (saved) {
+            let parsed = JSON.parse(saved);
+            // Migration logic: convert tags to category and ingredients
+            parsed = parsed.map((m: any) => {
+                if (m.tags && !m.category && !m.ingredients) {
+                    return {
+                        id: m.id,
+                        name: m.name,
+                        category:
+                            m.tags.length > 0
+                                ? categories.find((c) => c.name === m.tags[0])
+                                      ?.id ||
+                                  categories[0]?.id ||
+                                  "미지정"
+                                : categories[0]?.id || "미지정",
+                        ingredients: m.tags.length > 1 ? m.tags.slice(1) : [],
+                    };
+                }
+                return { ...m, ingredients: m.ingredients || [] };
+            });
+            menuItems = parsed;
+        }
         const cd = localStorage.getItem("confirmDelete");
         confirmDelete = cd === null ? true : cd === "true";
+
+        // initialize default category selection
+        if (categories.length > 0) newCategory = categories[0].id;
     });
+
+    function getCategoryColor(catId: string) {
+        return categories.find((c) => c.id === catId)?.color || "#ccc";
+    }
+
+    function getCategoryName(catId: string) {
+        return (
+            categories.find((c) => c.id === catId)?.name || catId || "미지정"
+        );
+    }
 
     function saveMenuItems() {
         localStorage.setItem("menuItems", JSON.stringify(menuItems));
@@ -81,12 +145,15 @@
         const item: MenuItem = {
             id: "m_" + Date.now(),
             name: newMenuName.trim(),
-            tags: [...pendingTags],
+            category:
+                newCategory ||
+                (categories.length > 0 ? categories[0].id : "미지정"),
+            ingredients: [...pendingIngredients],
         };
         menuItems = [...menuItems, item];
         newMenuName = "";
-        pendingTags = [];
-        newTagInput = "";
+        pendingIngredients = [];
+        newIngredientInput = "";
         showMenuSuggestions = false;
         saveMenuItems();
     }
@@ -104,50 +171,58 @@
     function startEdit(item: MenuItem) {
         editingId = item.id;
         editName = item.name;
-        editTags = [...item.tags];
-        editTagInput = "";
+        editCategory = item.category;
+        editIngredients = [...(item.ingredients || [])];
+        editIngredientInput = "";
     }
 
     function cancelEdit() {
         editingId = null;
         editName = "";
-        editTags = [];
-        editTagInput = "";
+        editIngredients = [];
+        editIngredientInput = "";
     }
 
     function saveEdit() {
         if (!editingId || !editName.trim()) return;
         menuItems = menuItems.map((m) => {
             if (m.id === editingId)
-                return { ...m, name: editName.trim(), tags: [...editTags] };
+                return {
+                    ...m,
+                    name: editName.trim(),
+                    category: editCategory,
+                    ingredients: [...editIngredients],
+                };
             return m;
         });
         editingId = null;
         editName = "";
-        editTags = [];
-        editTagInput = "";
+        editIngredients = [];
+        editIngredientInput = "";
         saveMenuItems();
     }
 
-    function addEditTag() {
-        const tag = editTagInput.trim();
-        if (!tag || editTags.includes(tag)) return;
-        editTags = [...editTags, tag];
-        editTagInput = "";
+    function addEditIngredient() {
+        const ing = editIngredientInput.trim();
+        if (!ing || editIngredients.includes(ing)) return;
+        editIngredients = [...editIngredients, ing];
+        editIngredientInput = "";
     }
 
-    function removeEditTag(tag: string) {
-        editTags = editTags.filter((t) => t !== tag);
+    function removeEditIngredient(ing: string) {
+        editIngredients = editIngredients.filter((t) => t !== ing);
     }
 
-    function handleEditTagKeydown(e: KeyboardEvent) {
+    function handleEditIngredientKeydown(e: KeyboardEvent) {
+        if (e.isComposing) return;
         if (e.key === "Enter") {
             e.preventDefault();
-            addEditTag();
+            addEditIngredient();
         }
     }
 
     function handleEditNameKeydown(e: KeyboardEvent) {
+        if (e.isComposing) return;
         if (e.key === "Enter") {
             e.preventDefault();
             saveEdit();
@@ -157,44 +232,53 @@
         }
     }
 
-    function addPendingTag() {
-        const tag = newTagInput.trim();
-        if (!tag || pendingTags.includes(tag)) return;
-        pendingTags = [...pendingTags, tag];
-        newTagInput = "";
-        showTagSuggestions = false;
+    function addPendingIngredient() {
+        const ing = newIngredientInput.trim();
+        if (!ing || pendingIngredients.includes(ing)) return;
+        pendingIngredients = [...pendingIngredients, ing];
+        newIngredientInput = "";
+        showIngredientSuggestions = false;
     }
 
-    function removePendingTag(tag: string) {
-        pendingTags = pendingTags.filter((t) => t !== tag);
+    function removePendingIngredient(ing: string) {
+        pendingIngredients = pendingIngredients.filter((t) => t !== ing);
     }
 
-    function selectSuggestion(tag: string) {
-        if (!pendingTags.includes(tag)) pendingTags = [...pendingTags, tag];
-        newTagInput = "";
-        showTagSuggestions = false;
+    function selectIngredientSuggestion(ing: string) {
+        if (!pendingIngredients.includes(ing))
+            pendingIngredients = [...pendingIngredients, ing];
+        newIngredientInput = "";
+        showIngredientSuggestions = false;
     }
 
-    function toggleFilter(tag: string) {
-        activeFilters = activeFilters.includes(tag)
-            ? activeFilters.filter((f) => f !== tag)
-            : [...activeFilters, tag];
+    function toggleFilter(ing: string) {
+        activeFilters = activeFilters.includes(ing)
+            ? activeFilters.filter((f) => f !== ing)
+            : [...activeFilters, ing];
     }
 
     function clearFilters() {
         activeFilters = [];
+        activeCategoryFilter = null;
         searchInput = "";
         debouncedQuery = "";
     }
 
-    function handleTagKeydown(e: KeyboardEvent) {
+    function toggleCategoryFilter(catId: string) {
+        if (activeCategoryFilter === catId) activeCategoryFilter = null;
+        else activeCategoryFilter = catId;
+    }
+
+    function handleIngredientKeydown(e: KeyboardEvent) {
+        if (e.isComposing) return;
         if (e.key === "Enter") {
             e.preventDefault();
-            addPendingTag();
+            addPendingIngredient();
         }
     }
 
     function handleMenuAddKeydown(e: KeyboardEvent) {
+        if (e.isComposing) return;
         if (e.key === "Enter") {
             e.preventDefault();
             addNewMenu();
@@ -222,22 +306,36 @@
                     {#if editingId === item.id}
                         <div class="menu-row editing">
                             <div class="edit-form">
-                                <input
-                                    type="text"
-                                    class="edit-name-input"
-                                    bind:value={editName}
-                                    on:keydown={handleEditNameKeydown}
-                                    placeholder="메뉴 이름"
-                                />
+                                <div style="display:flex; gap: 8px;">
+                                    <select
+                                        bind:value={editCategory}
+                                        class="category-select"
+                                        style="min-width: 100px;"
+                                    >
+                                        {#each categories as cat}
+                                            <option value={cat.id}
+                                                >{cat.name}</option
+                                            >
+                                        {/each}
+                                    </select>
+                                    <input
+                                        type="text"
+                                        class="edit-name-input"
+                                        bind:value={editName}
+                                        on:keydown={handleEditNameKeydown}
+                                        placeholder="메뉴 이름"
+                                        style="flex: 1;"
+                                    />
+                                </div>
                                 <div class="edit-tags-row">
-                                    {#each editTags as tag}
+                                    {#each editIngredients as ing}
                                         <span class="tag-chip pending">
-                                            {tag}
+                                            {ing}
                                             <button
                                                 class="tag-remove"
                                                 on:click={() =>
-                                                    removeEditTag(tag)}
-                                                aria-label="{tag} 제거"
+                                                    removeEditIngredient(ing)}
+                                                aria-label="{ing} 제거"
                                                 >×</button
                                             >
                                         </span>
@@ -245,9 +343,9 @@
                                     <input
                                         type="text"
                                         class="edit-tag-input"
-                                        placeholder="태그 추가"
-                                        bind:value={editTagInput}
-                                        on:keydown={handleEditTagKeydown}
+                                        placeholder="재료 추가"
+                                        bind:value={editIngredientInput}
+                                        on:keydown={handleEditIngredientKeydown}
                                     />
                                 </div>
                                 <div class="edit-actions">
@@ -288,10 +386,16 @@
                                     ></path>
                                 </svg>
                             </button>
+                            <span
+                                class="cat-pill"
+                                style="--cat-color: {getCategoryColor(
+                                    item.category,
+                                )}">{getCategoryName(item.category)}</span
+                            >
                             <span class="menu-name">{item.name}</span>
                             <div class="menu-tags">
-                                {#each item.tags as tag}
-                                    <span class="tag-chip">{tag}</span>
+                                {#each item.ingredients || [] as ing}
+                                    <span class="tag-chip">{ing}</span>
                                 {/each}
                             </div>
                             <button
@@ -309,7 +413,7 @@
         </div>
     </div>
 
-    <!-- Right: Search + Tags + Add Form -->
+    <!-- Right: Search + Filters + Add Form -->
     <div class="menu-right-panel">
         <!-- Search -->
         <div class="panel-section">
@@ -329,10 +433,10 @@
                 <input
                     type="text"
                     class="search-input"
-                    placeholder="메뉴 또는 태그 검색..."
+                    placeholder="메뉴, 카테고리, 재료 검색..."
                     bind:value={searchInput}
                 />
-                {#if searchInput || activeFilters.length > 0}
+                {#if searchInput || activeFilters.length > 0 || activeCategoryFilter}
                     <button
                         class="btn-clear-search"
                         on:click={clearFilters}
@@ -343,22 +447,41 @@
         </div>
 
         <!-- Tag Filters -->
-        {#if allTags.length > 0}
+        {#if categories.length > 0 || allIngredients.length > 0}
             <div class="panel-section">
-                <h3 class="panel-title">🏷️ 태그 필터</h3>
-                <div class="tag-filter-bar">
-                    {#each allTags as tag}
+                <h3 class="panel-title" style="margin-bottom: 8px;">📊 필터</h3>
+                <div style="font-size: 0.8rem; color:#888; margin-bottom: 6px;">
+                    카테고리
+                </div>
+                <div class="tag-filter-bar" style="margin-bottom: 12px;">
+                    {#each categories as cat}
                         <button
                             class="tag-filter-chip"
-                            class:active={activeFilters.includes(tag)}
-                            on:click={() => toggleFilter(tag)}>{tag}</button
+                            class:active={activeCategoryFilter === cat.id}
+                            style={activeCategoryFilter === cat.id
+                                ? `background-color: ${cat.color}; color: white; border-color: ${cat.color};`
+                                : ""}
+                            on:click={() => toggleCategoryFilter(cat.id)}
+                            >{cat.name}</button
                         >
                     {/each}
                 </div>
-                {#if activeFilters.length > 0}
-                    <button class="btn-clear-filters" on:click={clearFilters}
-                        >필터 초기화</button
+
+                {#if allIngredients.length > 0}
+                    <div
+                        style="font-size: 0.8rem; color:#888; margin-bottom: 6px;"
                     >
+                        재료
+                    </div>
+                    <div class="tag-filter-bar">
+                        {#each allIngredients as ing}
+                            <button
+                                class="tag-filter-chip"
+                                class:active={activeFilters.includes(ing)}
+                                on:click={() => toggleFilter(ing)}>{ing}</button
+                            >
+                        {/each}
+                    </div>
                 {/if}
             </div>
         {/if}
@@ -367,69 +490,93 @@
         <div class="panel-section">
             <h3 class="panel-title">➕ 메뉴 등록</h3>
             <div class="add-menu-compact">
-                <div class="menu-name-wrapper">
-                    <input
-                        type="text"
-                        class="menu-name-input"
-                        class:duplicate={isDuplicate}
-                        placeholder="메뉴 이름 (예: 오징어보쌈)"
-                        bind:value={newMenuName}
-                        on:keydown={handleMenuAddKeydown}
-                        on:focus={() => (showMenuSuggestions = true)}
-                        on:blur={() =>
-                            setTimeout(
-                                () => (showMenuSuggestions = false),
-                                200,
-                            )}
-                    />
-                    {#if isDuplicate}
-                        <span class="duplicate-warning"
-                            >⚠ 이미 등록된 메뉴</span
-                        >
-                    {/if}
-                    {#if showMenuSuggestions && menuNameSuggestions.length > 0 && newMenuName.trim() && !isDuplicate}
-                        <div class="menu-suggestions">
-                            {#each menuNameSuggestions as item}
-                                <div class="suggestion-item-row">
-                                    <span class="suggestion-name"
-                                        >{item.name}</span
-                                    >
-                                    <span class="suggestion-tags">
-                                        {#each item.tags as t}
-                                            <span class="tag-chip small"
-                                                >{t}</span
-                                            >
-                                        {/each}
-                                    </span>
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
+                <div
+                    class="menu-name-wrapper"
+                    style="display:flex; gap: 8px; flex-direction:column;"
+                >
+                    <select bind:value={newCategory} class="category-select">
+                        {#each categories as cat}
+                            <option value={cat.id}>{cat.name}</option>
+                        {/each}
+                    </select>
+
+                    <div style="position: relative;">
+                        <input
+                            type="text"
+                            class="menu-name-input"
+                            class:duplicate={isDuplicate}
+                            placeholder="메뉴 이름 (예: 오징어보쌈)"
+                            bind:value={newMenuName}
+                            on:keydown={handleMenuAddKeydown}
+                            on:focus={() => (showMenuSuggestions = true)}
+                            on:blur={() =>
+                                setTimeout(
+                                    () => (showMenuSuggestions = false),
+                                    200,
+                                )}
+                            style="width: 100%; box-sizing: border-box;"
+                        />
+                        {#if isDuplicate}
+                            <span class="duplicate-warning"
+                                >⚠ 이미 등록된 메뉴</span
+                            >
+                        {/if}
+                        {#if showMenuSuggestions && menuNameSuggestions.length > 0 && newMenuName.trim() && !isDuplicate}
+                            <div class="menu-suggestions" style="top: 100%;">
+                                {#each menuNameSuggestions as item}
+                                    <div class="suggestion-item-row">
+                                        <span
+                                            class="cat-pill small"
+                                            style="--cat-color: {getCategoryColor(
+                                                item.category,
+                                            )}"
+                                            >{getCategoryName(
+                                                item.category,
+                                            )}</span
+                                        >
+                                        <span class="suggestion-name"
+                                            >{item.name}</span
+                                        >
+                                        <span class="suggestion-tags">
+                                            {#each item.ingredients || [] as t}
+                                                <span class="tag-chip small"
+                                                    >{t}</span
+                                                >
+                                            {/each}
+                                        </span>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
                 </div>
 
                 <div class="tag-input-wrapper">
                     <input
                         type="text"
                         class="tag-input"
-                        placeholder="태그 입력 후 Enter"
-                        bind:value={newTagInput}
-                        on:keydown={handleTagKeydown}
-                        on:focus={() => (showTagSuggestions = true)}
+                        placeholder="재료 입력 후 Enter"
+                        bind:value={newIngredientInput}
+                        on:keydown={handleIngredientKeydown}
+                        on:focus={() => (showIngredientSuggestions = true)}
                         on:blur={() =>
-                            setTimeout(() => (showTagSuggestions = false), 200)}
+                            setTimeout(
+                                () => (showIngredientSuggestions = false),
+                                200,
+                            )}
                     />
                     <button
                         class="btn-add-tag"
-                        on:click={addPendingTag}
-                        aria-label="태그 추가">+</button
+                        on:click={addPendingIngredient}
+                        aria-label="재료 추가">+</button
                     >
-                    {#if showTagSuggestions && tagSuggestions.length > 0 && newTagInput}
+                    {#if showIngredientSuggestions && ingredientSuggestions.length > 0 && newIngredientInput}
                         <div class="tag-suggestions">
-                            {#each tagSuggestions.slice(0, 5) as suggestion}
+                            {#each ingredientSuggestions.slice(0, 5) as suggestion}
                                 <button
                                     class="suggestion-item"
                                     on:mousedown={() =>
-                                        selectSuggestion(suggestion)}
+                                        selectIngredientSuggestion(suggestion)}
                                     >{suggestion}</button
                                 >
                             {/each}
@@ -437,15 +584,16 @@
                     {/if}
                 </div>
 
-                {#if pendingTags.length > 0}
+                {#if pendingIngredients.length > 0}
                     <div class="pending-tags">
-                        {#each pendingTags as tag}
+                        {#each pendingIngredients as ing}
                             <span class="tag-chip pending">
-                                {tag}
+                                {ing}
                                 <button
                                     class="tag-remove"
-                                    on:click={() => removePendingTag(tag)}
-                                    aria-label="{tag} 태그 제거">×</button
+                                    on:click={() =>
+                                        removePendingIngredient(ing)}
+                                    aria-label="{ing} 제거">×</button
                                 >
                             </span>
                         {/each}
@@ -456,9 +604,42 @@
                     class="btn-mac btn-add-menu-full"
                     on:click={addNewMenu}
                     disabled={!newMenuName.trim() || isDuplicate}
-                    >메뉴 추가</button
                 >
+                    메뉴 추가
+                </button>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .cat-pill {
+        display: inline-block;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background-color: var(--cat-color, #eee);
+        color: #fff;
+        font-weight: 600;
+        margin-right: 8px;
+        flex-shrink: 0;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    }
+    .cat-pill.small {
+        font-size: 0.65rem;
+        padding: 1px 6px;
+        margin-right: 4px;
+    }
+    .category-select {
+        flex-shrink: 0;
+        padding: 8px;
+        border: 1px solid var(--mac-border);
+        border-radius: 6px;
+        background: white;
+        font-size: 0.9rem;
+        outline: none;
+    }
+    .category-select:focus {
+        border-color: var(--mac-accent);
+    }
+</style>

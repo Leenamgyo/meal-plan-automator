@@ -1,5 +1,10 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import {
+        dummyCategories,
+        generateDummyMenus,
+        generateRandomMealPlan,
+    } from "$lib/dummyData";
 
     export let geminiKey: string;
     export let supabaseUrl: string;
@@ -8,20 +13,92 @@
     let saveMsgVisible = false;
     let confirmDelete = true;
 
+    interface Category {
+        id: string;
+        name: string;
+        color: string;
+    }
+
+    const defaultCategories: Category[] = [...dummyCategories];
+
+    let categories: Category[] = [];
+
     onMount(() => {
         const cd = localStorage.getItem("confirmDelete");
         confirmDelete = cd === null ? true : cd === "true";
+
+        const savedCats = localStorage.getItem("menuCategories");
+        if (savedCats) {
+            categories = JSON.parse(savedCats);
+        } else {
+            categories = [...defaultCategories];
+            localStorage.setItem("menuCategories", JSON.stringify(categories));
+        }
     });
+
+    function addCategory() {
+        categories = [
+            ...categories,
+            { id: `cat-${Date.now()}`, name: "새 카테고리", color: "#cccccc" },
+        ];
+    }
+
+    function removeCategory(id: string) {
+        categories = categories.filter((c) => c.id !== id);
+    }
 
     function saveSettings() {
         localStorage.setItem("geminiKey", geminiKey);
         localStorage.setItem("supabaseUrl", supabaseUrl);
         localStorage.setItem("supabaseKey", supabaseKey);
         localStorage.setItem("confirmDelete", String(confirmDelete));
+        localStorage.setItem("menuCategories", JSON.stringify(categories));
         saveMsgVisible = true;
         setTimeout(() => {
             saveMsgVisible = false;
         }, 2000);
+    }
+
+    function injectDummyData() {
+        if (
+            confirm(
+                "기존 카테고리와 200여 개의 테스트 메뉴 데이터로 덮어쓰시겠습니까?",
+            )
+        ) {
+            const menus = generateDummyMenus();
+            localStorage.setItem(
+                "menuCategories",
+                JSON.stringify(dummyCategories),
+            );
+            localStorage.setItem("menuItems", JSON.stringify(menus));
+            location.reload();
+        }
+    }
+
+    function injectFebruaryMealPlan() {
+        const savedItems = localStorage.getItem("menuItems");
+        if (!savedItems) {
+            alert("먼저 메뉴 데이터를 세팅해주세요.");
+            return;
+        }
+        if (
+            confirm(
+                "2026년 2월 식단표를 임의로 생성하시겠습니까? (기존 2월 식단 덮어쓰기)",
+            )
+        ) {
+            const menuItems = JSON.parse(savedItems);
+            const newMealData = generateRandomMealPlan(2026, 2, menuItems);
+
+            // Merge with existing
+            const existingRaw = localStorage.getItem("mealData");
+            const existingMealData = existingRaw ? JSON.parse(existingRaw) : {};
+
+            const merged = { ...existingMealData, ...newMealData };
+            localStorage.setItem("mealData", JSON.stringify(merged));
+
+            alert("2월 식단표 생성이 완료되었습니다.");
+            location.reload();
+        }
     }
 </script>
 
@@ -64,6 +141,48 @@
             <h3
                 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 600;"
             >
+                카테고리 설정
+            </h3>
+            <div class="subtitle" style="margin-bottom: 12px;">
+                식단표에 표시될 카테고리와 식상(색상)을 설정합니다.
+            </div>
+            <div class="category-list">
+                {#each categories as cat (cat.id)}
+                    <div class="category-row">
+                        <input
+                            type="color"
+                            bind:value={cat.color}
+                            class="color-picker"
+                        />
+                        <span
+                            class="cat-pill small"
+                            style="background-color: {cat.color};"
+                        >
+                            {cat.name || "새 카테고리"}
+                        </span>
+                        <input
+                            type="text"
+                            bind:value={cat.name}
+                            class="category-name-input"
+                            placeholder="카테고리명"
+                        />
+                        <button
+                            class="btn-remove-category"
+                            on:click={() => removeCategory(cat.id)}
+                            aria-label="삭제">×</button
+                        >
+                    </div>
+                {/each}
+                <button class="btn-add-category" on:click={addCategory}
+                    >+ 카테고리 추가</button
+                >
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 2rem;">
+            <h3
+                style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 600;"
+            >
                 일반 설정
             </h3>
             <label
@@ -81,8 +200,22 @@
             </label>
         </div>
 
-        <div style="margin-top: 1.5rem;">
+        <div
+            style="margin-top: 1.5rem; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
+        >
             <button on:click={saveSettings} class="btn-mac">설정 저장</button>
+            <button
+                on:click={injectDummyData}
+                class="btn-mac"
+                style="background: white; border: 1px solid #ced4da; color: #495057;"
+                >기본 카테고리 + 200개 메뉴 세팅</button
+            >
+            <button
+                on:click={injectFebruaryMealPlan}
+                class="btn-mac"
+                style="background: #339af0; border: 1px solid #228be6; color: white;"
+                >2월 식단표 임의 생성</button
+            >
             {#if saveMsgVisible}
                 <span
                     style="margin-left:12px; font-size:0.85rem; color:#27c93f;"
