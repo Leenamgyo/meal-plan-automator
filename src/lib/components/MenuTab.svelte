@@ -159,10 +159,8 @@
     }
 
     function removeMenu(id: string) {
-        if (confirmDelete) {
-            const item = menuItems.find((m) => m.id === id);
-            if (!confirm(`"${item?.name}" 메뉴를 삭제하시겠습니까?`)) return;
-        }
+        const item = menuItems.find((m) => m.id === id);
+        if (!confirm(`"${item?.name}" 메뉴를 삭제하시겠습니까?`)) return;
         menuItems = menuItems.filter((m) => m.id !== id);
         if (editingId === id) editingId = null;
         saveMenuItems();
@@ -289,9 +287,9 @@
 <div class="menu-management">
     <!-- Left: Menu List -->
     <div class="menu-left-panel">
-        <div class="menu-list">
+        <div class="menu-grid">
             {#if filteredItems.length === 0}
-                <div class="empty-state">
+                <div class="empty-state" style="grid-column: 1 / -1;">
                     {#if menuItems.length === 0}
                         <p>등록된 메뉴가 없습니다.</p>
                         <p style="font-size: 0.85rem; color: #aaa;">
@@ -304,7 +302,10 @@
             {:else}
                 {#each filteredItems as item (item.id)}
                     {#if editingId === item.id}
-                        <div class="menu-row editing">
+                        <div
+                            class="menu-card editing"
+                            style="grid-column: 1 / -1;"
+                        >
                             <div class="edit-form">
                                 <div style="display:flex; gap: 8px;">
                                     <select
@@ -329,16 +330,15 @@
                                 </div>
                                 <div class="edit-tags-row">
                                     {#each editIngredients as ing}
-                                        <span class="tag-chip pending">
-                                            {ing}
-                                            <button
+                                        <span class="tag-chip pending"
+                                            >{ing}<button
                                                 class="tag-remove"
                                                 on:click={() =>
                                                     removeEditIngredient(ing)}
                                                 aria-label="{ing} 제거"
                                                 >×</button
-                                            >
-                                        </span>
+                                            ></span
+                                        >
                                     {/each}
                                     <input
                                         type="text"
@@ -361,55 +361,66 @@
                             </div>
                         </div>
                     {:else}
-                        <div class="menu-row">
-                            <button
-                                class="btn-edit-menu"
-                                on:click={() => startEdit(item)}
-                                aria-label="{item.name} 수정"
-                                title="수정"
-                            >
-                                <svg
-                                    width="13"
-                                    height="13"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
+                        <div
+                            class="menu-card"
+                            style="border-left: 3px solid {getCategoryColor(
+                                item.category,
+                            )};"
+                        >
+                            <div class="card-top">
+                                <span
+                                    class="cat-pill small"
+                                    style="background-color: {getCategoryColor(
+                                        item.category,
+                                    )};">{getCategoryName(item.category)}</span
                                 >
-                                    <path
-                                        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                                    ></path>
-                                    <path
-                                        d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                                    ></path>
-                                </svg>
-                            </button>
-                            <span
-                                class="cat-pill"
-                                style="--cat-color: {getCategoryColor(
-                                    item.category,
-                                )}">{getCategoryName(item.category)}</span
-                            >
-                            <span class="menu-name">{item.name}</span>
-                            <div class="menu-tags">
-                                {#each item.ingredients || [] as ing}
-                                    <span class="tag-chip">{ing}</span>
-                                {/each}
+                                <div class="card-actions">
+                                    <button
+                                        class="btn-edit-menu"
+                                        on:click={() => startEdit(item)}
+                                        aria-label="수정"
+                                        title="수정"
+                                    >
+                                        <svg
+                                            width="12"
+                                            height="12"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <path
+                                                d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                                            ></path>
+                                            <path
+                                                d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                                            ></path>
+                                        </svg>
+                                    </button>
+                                    <button
+                                        class="btn-remove-menu"
+                                        on:click={() => removeMenu(item.id)}
+                                        aria-label="삭제">×</button
+                                    >
+                                </div>
                             </div>
-                            <button
-                                class="btn-remove-menu"
-                                on:click={() => removeMenu(item.id)}
-                                aria-label="{item.name} 삭제">×</button
-                            >
+                            <div class="card-name">{item.name}</div>
+                            {#if item.ingredients && item.ingredients.length > 0}
+                                <div class="card-tags">
+                                    {#each item.ingredients as ing}
+                                        <span class="tag-chip">{ing}</span>
+                                    {/each}
+                                </div>
+                            {/if}
                         </div>
                     {/if}
                 {/each}
             {/if}
-            <div class="menu-count">
-                {filteredItems.length}/{menuItems.length}개 메뉴
-            </div>
+        </div>
+        <div class="menu-count">
+            {filteredItems.length}/{menuItems.length}개 메뉴
         </div>
     </div>
 

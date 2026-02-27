@@ -7,8 +7,6 @@
     } from "$lib/dummyData";
 
     export let geminiKey: string;
-    export let supabaseUrl: string;
-    export let supabaseKey: string;
 
     let saveMsgVisible = false;
     let confirmDelete = true;
@@ -49,56 +47,12 @@
 
     function saveSettings() {
         localStorage.setItem("geminiKey", geminiKey);
-        localStorage.setItem("supabaseUrl", supabaseUrl);
-        localStorage.setItem("supabaseKey", supabaseKey);
         localStorage.setItem("confirmDelete", String(confirmDelete));
         localStorage.setItem("menuCategories", JSON.stringify(categories));
         saveMsgVisible = true;
         setTimeout(() => {
             saveMsgVisible = false;
         }, 2000);
-    }
-
-    function injectDummyData() {
-        if (
-            confirm(
-                "기존 카테고리와 200여 개의 테스트 메뉴 데이터로 덮어쓰시겠습니까?",
-            )
-        ) {
-            const menus = generateDummyMenus();
-            localStorage.setItem(
-                "menuCategories",
-                JSON.stringify(dummyCategories),
-            );
-            localStorage.setItem("menuItems", JSON.stringify(menus));
-            location.reload();
-        }
-    }
-
-    function injectFebruaryMealPlan() {
-        const savedItems = localStorage.getItem("menuItems");
-        if (!savedItems) {
-            alert("먼저 메뉴 데이터를 세팅해주세요.");
-            return;
-        }
-        if (
-            confirm(
-                "2026년 2월 식단표를 임의로 생성하시겠습니까? (기존 2월 식단 덮어쓰기)",
-            )
-        ) {
-            const menuItems = JSON.parse(savedItems);
-            const newMealData = generateRandomMealPlan(2026, 2, menuItems);
-
-            // Merge with existing
-            const existingRaw = localStorage.getItem("mealData");
-            const existingMealData = existingRaw ? JSON.parse(existingRaw) : {};
-
-            const merged = { ...existingMealData, ...newMealData };
-            localStorage.setItem("mealData", JSON.stringify(merged));
-
-            alert("2월 식단표 생성이 완료되었습니다.");
-            location.reload();
-        }
     }
 </script>
 
@@ -114,26 +68,6 @@
                 id="gemini-key"
                 bind:value={geminiKey}
                 placeholder="AIzaSy..."
-            />
-        </div>
-
-        <div class="form-group" style="margin-top:2rem;">
-            <label for="supabase-url">Supabase 프로젝트 URL</label>
-            <input
-                type="text"
-                id="supabase-url"
-                bind:value={supabaseUrl}
-                placeholder="https://your-project.supabase.co"
-            />
-        </div>
-
-        <div class="form-group">
-            <label for="supabase-key">Supabase API 키 (anon/public)</label>
-            <input
-                type="password"
-                id="supabase-key"
-                bind:value={supabaseKey}
-                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
             />
         </div>
 
@@ -154,12 +88,6 @@
                             bind:value={cat.color}
                             class="color-picker"
                         />
-                        <span
-                            class="cat-pill small"
-                            style="background-color: {cat.color};"
-                        >
-                            {cat.name || "새 카테고리"}
-                        </span>
                         <input
                             type="text"
                             bind:value={cat.name}
@@ -204,18 +132,6 @@
             style="margin-top: 1.5rem; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
         >
             <button on:click={saveSettings} class="btn-mac">설정 저장</button>
-            <button
-                on:click={injectDummyData}
-                class="btn-mac"
-                style="background: white; border: 1px solid #ced4da; color: #495057;"
-                >기본 카테고리 + 200개 메뉴 세팅</button
-            >
-            <button
-                on:click={injectFebruaryMealPlan}
-                class="btn-mac"
-                style="background: #339af0; border: 1px solid #228be6; color: white;"
-                >2월 식단표 임의 생성</button
-            >
             {#if saveMsgVisible}
                 <span
                     style="margin-left:12px; font-size:0.85rem; color:#27c93f;"

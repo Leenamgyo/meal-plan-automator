@@ -2,7 +2,6 @@
     import "../app.css";
     import { onMount } from "svelte";
 
-    import ChatTab from "$lib/components/ChatTab.svelte";
     import MenuTab from "$lib/components/MenuTab.svelte";
     import SettingsTab from "$lib/components/SettingsTab.svelte";
     import CalendarTab from "$lib/components/CalendarTab.svelte";
@@ -11,13 +10,9 @@
     let activeTab = "calendar";
 
     let geminiKey = "";
-    let supabaseUrl = "";
-    let supabaseKey = "";
 
     onMount(() => {
         geminiKey = localStorage.getItem("geminiKey") || "";
-        supabaseUrl = localStorage.getItem("supabaseUrl") || "";
-        supabaseKey = localStorage.getItem("supabaseKey") || "";
     });
 </script>
 
@@ -51,23 +46,6 @@
                 <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
             식단표
-        </button>
-        <button
-            class="tab-btn"
-            class:active={activeTab === "main"}
-            on:click={() => (activeTab = "main")}
-        >
-            <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-            >
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            </svg>
-            식단 변환기
         </button>
         <button
             class="tab-btn"
@@ -134,15 +112,13 @@
 </header>
 
 <main>
-    {#if activeTab === "main"}
-        <ChatTab {geminiKey} />
-    {:else if activeTab === "menu"}
+    {#if activeTab === "menu"}
         <MenuTab />
     {:else if activeTab === "calendar"}
-        <CalendarTab />
+        <CalendarTab {geminiKey} />
     {:else if activeTab === "stats"}
         <StatsTab />
     {:else if activeTab === "settings"}
-        <SettingsTab bind:geminiKey bind:supabaseUrl bind:supabaseKey />
+        <SettingsTab bind:geminiKey />
     {/if}
 </main>
