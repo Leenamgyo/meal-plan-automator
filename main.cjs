@@ -7,7 +7,8 @@ const Database = require('better-sqlite3');
 // ========== 설정 ==========
 const BUILD_DIR = path.join(__dirname, 'build');
 const PORT = 3737;
-const DB_PATH = path.join(app.getPath('userData'), 'meal-chart.db');
+// 사용자 요청으로 프로젝트 폴더 내부에 DB 저장
+const DB_PATH = path.join(__dirname, 'meal-chart.db');
 
 // ========== SQLite 초기화 ==========
 let db;
@@ -21,6 +22,7 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#cccccc',
+      sort_order INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -40,6 +42,13 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  try {
+    // 마이그레이션: 기존 DB에 sort_order 컬럼이 없으면 추가
+    db.exec(`ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0`);
+  } catch (err) {
+    // 이미 존재하는 경우 무시
+  }
 
   console.log(`SQLite DB 경로: ${DB_PATH}`);
 }
@@ -81,7 +90,7 @@ async function handleAPI(req, res) {
 
   // ===== Categories =====
   if (url === '/api/categories' && method === 'GET') {
-    const rows = db.prepare('SELECT * FROM categories ORDER BY created_at').all();
+    const rows = db.prepare('SELECT * FROM categories ORDER BY sort_order ASC, created_at ASC').all();
     return sendJSON(res, rows);
   }
 
@@ -97,8 +106,18 @@ async function handleAPI(req, res) {
   if (catMatch && method === 'PUT') {
     const id = parseInt(catMatch[1]);
     const body = await parseBody(req);
-    db.prepare('UPDATE categories SET name = COALESCE(?, name), color = COALESCE(?, color) WHERE id = ?')
-      .run(body.name, body.color, id);
+    const setParts = [];
+    const values = [];
+
+    if (body.name !== undefined) { setParts.push('name = ?'); values.push(body.name); }
+    if (body.color !== undefined) { setParts.push('color = ?'); values.push(body.color); }
+    if (body.sort_order !== undefined) { setParts.push('sort_order = ?'); values.push(body.sort_order); }
+
+    if (setParts.length > 0) {
+      values.push(id);
+      db.prepare(`UPDATE categories SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
+    }
+
     const row = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
     return sendJSON(res, row);
   }

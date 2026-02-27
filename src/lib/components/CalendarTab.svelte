@@ -33,13 +33,13 @@
     let menuItems: MenuItem[] = [];
 
     // Calendar filter state
-    let calendarCategoryFilters: string[] = [];
+    let calendarCategoryFilter: number | null = null;
     let calendarSearchText = "";
 
     // Right Panel State
     let selectedDate: string | null = null;
     let searchInput = "";
-    let activeCategoryFilters: string[] = [];
+    let activeCategoryFilter: number | null = null;
     let sortOrder: "name" | "category" = "name";
 
     // AI Chat State
@@ -102,8 +102,8 @@
                     ing.toLowerCase().includes(searchInput.toLowerCase()),
                 ));
         const matchCategory =
-            activeCategoryFilters.length === 0 ||
-            activeCategoryFilters.includes(item.category_id);
+            activeCategoryFilter === null ||
+            item.category_id === activeCategoryFilter;
         return matchSearch && matchCategory;
     });
 
@@ -170,20 +170,20 @@
         }
     }
 
-    function toggleCalendarCategoryFilter(catId: string) {
-        if (calendarCategoryFilters.includes(catId))
-            calendarCategoryFilters = calendarCategoryFilters.filter(
-                (f) => f !== catId,
-            );
-        else calendarCategoryFilters = [...calendarCategoryFilters, catId];
+    function toggleCalendarCategoryFilter(catId: number) {
+        if (calendarCategoryFilter === catId) {
+            calendarCategoryFilter = null;
+        } else {
+            calendarCategoryFilter = catId;
+        }
     }
 
-    function toggleCategoryFilter(catId: string) {
-        if (activeCategoryFilters.includes(catId))
-            activeCategoryFilters = activeCategoryFilters.filter(
-                (f) => f !== catId,
-            );
-        else activeCategoryFilters = [...activeCategoryFilters, catId];
+    function toggleCategoryFilter(catId: number) {
+        if (activeCategoryFilter === catId) {
+            activeCategoryFilter = null;
+        } else {
+            activeCategoryFilter = catId;
+        }
     }
 
     function selectDate(cd: CalendarDay) {
@@ -193,7 +193,7 @@
     function closePanel() {
         selectedDate = null;
         searchInput = "";
-        activeCategoryFilters = [];
+        activeCategoryFilter = null;
     }
 
     function addMealToDate(menuName: string) {
@@ -218,7 +218,7 @@
         return cat?.color || "#ced4da";
     }
 
-    function getMenuCategoryId(menuName: string): string | null {
+    function getMenuCategoryId(menuName: string): number | null {
         const item = menuItems.find((m) => m.name === menuName);
         return item?.category_id || null;
     }
@@ -230,16 +230,16 @@
     function getMenus(
         cd: CalendarDay,
         md: Record<string, string[]>,
-        catFilters: string[],
+        catFilter: number | null,
         searchText: string,
     ): string[] {
         if (cd.isOtherMonth) return [];
         let menus = md[dateKey(cd.day)] || [];
         // Apply calendar-level filters
-        if (catFilters.length > 0) {
+        if (catFilter !== null) {
             menus = menus.filter((m) => {
                 const catId = getMenuCategoryId(m);
-                return catId && catFilters.includes(catId);
+                return catId === catFilter;
             });
         }
         if (searchText) {
@@ -304,17 +304,15 @@
                 <div class="tag-filter-bar cal-tags">
                     <button
                         class="tag-filter-chip"
-                        class:active={calendarCategoryFilters.length === 0}
-                        on:click={() => (calendarCategoryFilters = [])}
+                        class:active={calendarCategoryFilter === null}
+                        on:click={() => (calendarCategoryFilter = null)}
                         >전체</button
                     >
                     {#each categories as cat}
                         <button
                             class="tag-filter-chip"
-                            class:active={calendarCategoryFilters.includes(
-                                cat.id,
-                            )}
-                            style={calendarCategoryFilters.includes(cat.id)
+                            class:active={calendarCategoryFilter === cat.id}
+                            style={calendarCategoryFilter === cat.id
                                 ? `background-color: ${cat.color}; color: white; border-color: ${cat.color};`
                                 : ""}
                             on:click={() =>
@@ -357,7 +355,7 @@
                             {@const menus = getMenus(
                                 cd,
                                 mealData,
-                                calendarCategoryFilters,
+                                calendarCategoryFilter,
                                 calendarSearchText,
                             )}
                             {#if menus.length > 0}
@@ -411,17 +409,15 @@
                     <div class="tag-filter-bar" style="flex:1; margin:0;">
                         <button
                             class="tag-filter-chip"
-                            class:active={activeCategoryFilters.length === 0}
-                            on:click={() => (activeCategoryFilters = [])}
+                            class:active={activeCategoryFilter === null}
+                            on:click={() => (activeCategoryFilter = null)}
                             >전체</button
                         >
                         {#each categories as cat}
                             <button
                                 class="tag-filter-chip"
-                                class:active={activeCategoryFilters.includes(
-                                    cat.id,
-                                )}
-                                style={activeCategoryFilters.includes(cat.id)
+                                class:active={activeCategoryFilter === cat.id}
+                                style={activeCategoryFilter === cat.id
                                     ? `background-color: ${cat.color}; color: white; border-color: ${cat.color};`
                                     : `border-left: 3px solid ${cat.color};`}
                                 on:click={() => toggleCategoryFilter(cat.id)}

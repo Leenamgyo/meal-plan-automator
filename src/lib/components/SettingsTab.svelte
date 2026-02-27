@@ -7,37 +7,49 @@
     let confirmDelete = true;
 
     interface Category {
-        id: string;
+        id: number;
         name: string;
         color: string;
     }
 
     let categories: Category[] = [];
 
-    onMount(() => {
+    import {
+        createCategory,
+        deleteCategory,
+        updateCategory,
+        fetchCategories,
+    } from "$lib/db";
+
+    onMount(async () => {
         const cd = localStorage.getItem("confirmDelete");
         confirmDelete = cd === null ? true : cd === "true";
 
-        const savedCats = localStorage.getItem("menuCategories");
-        if (savedCats) {
-            categories = JSON.parse(savedCats);
-        }
+        categories = await fetchCategories();
     });
 
-    function addCategory() {
-        categories = [
-            ...categories,
-            { id: `cat-${Date.now()}`, name: "새 카테고리", color: "#cccccc" },
-        ];
+    async function addCategory() {
+        const newCat = await createCategory("새 카테고리", "#cccccc");
+        if (newCat) {
+            categories = [...categories, newCat];
+        }
     }
 
-    function removeCategory(id: string) {
-        categories = categories.filter((c) => c.id !== id);
+    async function removeCategory(id: number) {
+        const success = await deleteCategory(id);
+        if (success) {
+            categories = categories.filter((c) => c.id !== id);
+        }
     }
 
     async function saveSettings() {
         localStorage.setItem("geminiKey", geminiKey);
         localStorage.setItem("confirmDelete", String(confirmDelete));
+
+        // Update all categories in DB
+        for (const cat of categories) {
+            await updateCategory(cat.id, { name: cat.name, color: cat.color });
+        }
         localStorage.setItem("menuCategories", JSON.stringify(categories));
 
         saveMsgVisible = true;

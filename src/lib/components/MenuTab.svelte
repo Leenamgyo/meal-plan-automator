@@ -72,7 +72,7 @@
             activeFilters.every((f) => (item.ingredients || []).includes(f));
 
         const matchCatFilter =
-            !activeCategoryFilter || item.category === activeCategoryFilter;
+            !activeCategoryFilter || item.category_id === activeCategoryFilter;
 
         return matchSearch && matchFilter && matchCatFilter;
     });
