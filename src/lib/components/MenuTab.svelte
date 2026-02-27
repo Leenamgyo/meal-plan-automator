@@ -1,17 +1,24 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { hangulIncludes } from "$lib/hangul";
+    import {
+        fetchCategories,
+        fetchMenuItems,
+        createMenuItem,
+        updateMenuItem,
+        deleteMenuItem,
+    } from "$lib/db";
 
     interface Category {
-        id: string;
+        id: number;
         name: string;
         color: string;
     }
 
     interface MenuItem {
-        id: string;
+        id: number;
         name: string;
-        category: string;
+        category_id: number | null;
         ingredients: string[];
     }
 
@@ -21,9 +28,9 @@
     let debouncedQuery = "";
     let searchTimer: ReturnType<typeof setTimeout>;
     let activeFilters: string[] = []; // Ingredient filters
-    let activeCategoryFilter: string | null = null;
+    let activeCategoryFilter: number | null = null;
     let newMenuName = "";
-    let newCategory = "";
+    let newCategory: number | null = null;
     let newIngredientInput = "";
     let pendingIngredients: string[] = [];
     let showIngredientSuggestions = false;
@@ -31,9 +38,9 @@
     let confirmDelete = true;
 
     // Edit mode
-    let editingId: string | null = null;
+    let editingId: number | null = null;
     let editName = "";
-    let editCategory = "";
+    let editCategory: number | null = null;
     let editIngredientInput = "";
     let editIngredients: string[] = [];
 
@@ -51,9 +58,7 @@
 
     $: filteredItems = menuItems.filter((item) => {
         const catName =
-            categories.find((c) => c.id === item.category)?.name ||
-            item.category ||
-            "";
+            categories.find((c) => c.id === item.category_id)?.name || "";
         const matchSearch =
             !debouncedQuery ||
             hangulIncludes(item.name, debouncedQuery) ||
@@ -90,65 +95,55 @@
           )
         : false;
 
-    onMount(() => {
-        const savedCats = localStorage.getItem("menuCategories");
-        if (savedCats) {
-            categories = JSON.parse(savedCats);
-        }
-
-        const saved = localStorage.getItem("menuItems");
-        if (saved) {
-            let parsed = JSON.parse(saved);
-            // Migration logic: convert tags to category and ingredients
-            parsed = parsed.map((m: any) => {
-                if (m.tags && !m.category && !m.ingredients) {
-                    return {
-                        id: m.id,
-                        name: m.name,
-                        category:
-                            m.tags.length > 0
-                                ? categories.find((c) => c.name === m.tags[0])
-                                      ?.id ||
-                                  categories[0]?.id ||
-                                  "미지정"
-                                : categories[0]?.id || "미지정",
-                        ingredients: m.tags.length > 1 ? m.tags.slice(1) : [],
-                    };
-                }
-                return { ...m, ingredients: m.ingredients || [] };
-            });
-            menuItems = parsed;
-        }
+    onMount(async () => {
+        categories = await fetchCategories();
+        const items = await fetchMenuItems();
+        // Migration logic: convert tags to category and ingredients
+        menuItems = items.map((m: any) => {
+            if (m.tags && !m.category_id && !m.ingredients) {
+                return {
+                    id: m.id,
+                    name: m.name,
+                    category_id:
+                        m.tags.length > 0
+                            ? categories.find((c) => c.name === m.tags[0])
+                                  ?.id || null
+                            : null,
+                    ingredients: m.tags.length > 1 ? m.tags.slice(1) : [],
+                };
+            }
+            return { ...m, ingredients: m.ingredients || [] };
+        });
         const cd = localStorage.getItem("confirmDelete");
         confirmDelete = cd === null ? true : cd === "true";
 
-        // initialize default category selection
         if (categories.length > 0) newCategory = categories[0].id;
     });
 
-    function getCategoryColor(catId: string) {
+    function getCategoryColor(catId: number | null) {
         return categories.find((c) => c.id === catId)?.color || "#ccc";
     }
 
-    function getCategoryName(catId: string) {
-        return (
-            categories.find((c) => c.id === catId)?.name || catId || "미지정"
-        );
+    function getCategoryName(catId: number | null) {
+        return categories.find((c) => c.id === catId)?.name || "미지정";
     }
 
     function saveMenuItems() {
         localStorage.setItem("menuItems", JSON.stringify(menuItems));
     }
 
-    function addNewMenu() {
+    async function addNewMenu() {
         if (!newMenuName.trim() || isDuplicate) return;
-        const item: MenuItem = {
-            id: "m_" + Date.now(),
+        const data = {
             name: newMenuName.trim(),
-            category:
-                newCategory ||
-                (categories.length > 0 ? categories[0].id : "미지정"),
+            category_id: newCategory || null,
             ingredients: [...pendingIngredients],
+        };
+        const dbItem = await createMenuItem(data);
+        const item: MenuItem = {
+            id: dbItem?.id || Date.now(),
+            ...data,
+            category_id: data.category_id,
         };
         menuItems = [...menuItems, item];
         newMenuName = "";
@@ -158,18 +153,25 @@
         saveMenuItems();
     }
 
-    function removeMenu(id: string) {
+    function removeMenu(id: number) {
         const item = menuItems.find((m) => m.id === id);
         if (!confirm(`"${item?.name}" 메뉴를 삭제하시겠습니까?`)) return;
         menuItems = menuItems.filter((m) => m.id !== id);
         if (editingId === id) editingId = null;
         saveMenuItems();
+        deleteMenuItem(id);
     }
+
+    let editingId2: number | null = null;
+    let editName2 = "";
+    let editCategory2: number | null = null;
+    let editIngredients2: string[] = [];
+    let editIngredientInput2 = "";
 
     function startEdit(item: MenuItem) {
         editingId = item.id;
         editName = item.name;
-        editCategory = item.category;
+        editCategory = item.category_id;
         editIngredients = [...(item.ingredients || [])];
         editIngredientInput = "";
     }
@@ -183,16 +185,17 @@
 
     function saveEdit() {
         if (!editingId || !editName.trim()) return;
+        const editData = {
+            name: editName.trim(),
+            category_id: editCategory,
+            ingredients: [...editIngredients],
+        };
         menuItems = menuItems.map((m) => {
             if (m.id === editingId)
-                return {
-                    ...m,
-                    name: editName.trim(),
-                    category: editCategory,
-                    ingredients: [...editIngredients],
-                };
+                return { ...m, ...editData, category_id: editData.category_id };
             return m;
         });
+        updateMenuItem(editingId, editData);
         editingId = null;
         editName = "";
         editIngredients = [];
@@ -262,7 +265,7 @@
         debouncedQuery = "";
     }
 
-    function toggleCategoryFilter(catId: string) {
+    function toggleCategoryFilter(catId: number) {
         if (activeCategoryFilter === catId) activeCategoryFilter = null;
         else activeCategoryFilter = catId;
     }
@@ -333,7 +336,7 @@
                                         <span class="tag-chip pending"
                                             >{ing}<button
                                                 class="tag-remove"
-                                                on:click={() =>
+                                                on:click|stopPropagation={() =>
                                                     removeEditIngredient(ing)}
                                                 aria-label="{ing} 제거"
                                                 >×</button
@@ -364,15 +367,16 @@
                         <div
                             class="menu-card"
                             style="border-left: 3px solid {getCategoryColor(
-                                item.category,
+                                item.category_id,
                             )};"
                         >
                             <div class="card-top">
                                 <span
                                     class="cat-pill small"
                                     style="background-color: {getCategoryColor(
-                                        item.category,
-                                    )};">{getCategoryName(item.category)}</span
+                                        item.category_id,
+                                    )};"
+                                    >{getCategoryName(item.category_id)}</span
                                 >
                                 <div class="card-actions">
                                     <button
@@ -539,10 +543,10 @@
                                         <span
                                             class="cat-pill small"
                                             style="--cat-color: {getCategoryColor(
-                                                item.category,
+                                                item.category_id,
                                             )}"
                                             >{getCategoryName(
-                                                item.category,
+                                                item.category_id,
                                             )}</span
                                         >
                                         <span class="suggestion-name"

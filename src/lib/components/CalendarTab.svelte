@@ -2,6 +2,12 @@
     import { onMount } from "svelte";
     import { askGemini } from "$lib/gemini";
     import { PUBLIC_GEMINI_API_KEY } from "$env/static/public";
+    import {
+        fetchCategories,
+        fetchMenuItems,
+        fetchMealData,
+        saveMealForDate,
+    } from "$lib/db";
 
     export let geminiKey: string = "";
 
@@ -10,14 +16,14 @@
         isOtherMonth: boolean;
     }
     interface Category {
-        id: string;
+        id: number;
         name: string;
         color: string;
     }
     interface MenuItem {
-        id: string;
+        id: number;
         name: string;
-        category: string;
+        category_id: number | null;
         ingredients?: string[];
     }
 
@@ -97,7 +103,7 @@
                 ));
         const matchCategory =
             activeCategoryFilters.length === 0 ||
-            activeCategoryFilters.includes(item.category);
+            activeCategoryFilters.includes(item.category_id);
         return matchSearch && matchCategory;
     });
 
@@ -107,8 +113,12 @@
             items.sort((a, b) => a.name.localeCompare(b.name, "ko"));
         else
             items.sort((a, b) => {
-                const catA = categories.findIndex((c) => c.id === a.category);
-                const catB = categories.findIndex((c) => c.id === b.category);
+                const catA = categories.findIndex(
+                    (c) => c.id === a.category_id,
+                );
+                const catB = categories.findIndex(
+                    (c) => c.id === b.category_id,
+                );
                 return catA - catB || a.name.localeCompare(b.name, "ko");
             });
         return items;
@@ -147,17 +157,17 @@
     $: totalRows = Math.ceil(calendarDays.length / 7);
     const weekDays = ["일", "월", "화", "수", "목", "금", "토"];
 
-    onMount(() => {
-        const saved = localStorage.getItem("mealData");
-        if (saved) mealData = JSON.parse(saved);
-        const savedCats = localStorage.getItem("menuCategories");
-        if (savedCats) categories = JSON.parse(savedCats);
-        const savedItems = localStorage.getItem("menuItems");
-        if (savedItems) menuItems = JSON.parse(savedItems);
+    onMount(async () => {
+        categories = await fetchCategories();
+        menuItems = await fetchMenuItems();
+        mealData = await fetchMealData();
     });
 
     function saveMealData() {
         localStorage.setItem("mealData", JSON.stringify(mealData));
+        if (selectedDate) {
+            saveMealForDate(selectedDate, mealData[selectedDate] || []);
+        }
     }
 
     function toggleCalendarCategoryFilter(catId: string) {
@@ -204,13 +214,13 @@
     function getMenuColor(menuName: string): string {
         const item = menuItems.find((m) => m.name === menuName);
         if (!item) return "#ced4da";
-        const cat = categories.find((c) => c.id === item.category);
+        const cat = categories.find((c) => c.id === item.category_id);
         return cat?.color || "#ced4da";
     }
 
     function getMenuCategoryId(menuName: string): string | null {
         const item = menuItems.find((m) => m.name === menuName);
-        return item?.category || null;
+        return item?.category_id || null;
     }
 
     function dateKey(day: number): string {

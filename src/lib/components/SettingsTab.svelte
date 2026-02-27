@@ -1,10 +1,5 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import {
-        dummyCategories,
-        generateDummyMenus,
-        generateRandomMealPlan,
-    } from "$lib/dummyData";
 
     export let geminiKey: string;
 
@@ -17,8 +12,6 @@
         color: string;
     }
 
-    const defaultCategories: Category[] = [...dummyCategories];
-
     let categories: Category[] = [];
 
     onMount(() => {
@@ -28,9 +21,6 @@
         const savedCats = localStorage.getItem("menuCategories");
         if (savedCats) {
             categories = JSON.parse(savedCats);
-        } else {
-            categories = [...defaultCategories];
-            localStorage.setItem("menuCategories", JSON.stringify(categories));
         }
     });
 
@@ -45,10 +35,11 @@
         categories = categories.filter((c) => c.id !== id);
     }
 
-    function saveSettings() {
+    async function saveSettings() {
         localStorage.setItem("geminiKey", geminiKey);
         localStorage.setItem("confirmDelete", String(confirmDelete));
         localStorage.setItem("menuCategories", JSON.stringify(categories));
+
         saveMsgVisible = true;
         setTimeout(() => {
             saveMsgVisible = false;
