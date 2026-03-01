@@ -2,10 +2,8 @@
  * 달력 날짜 계산 유틸리티
  */
 
-export interface CalendarDay {
-    day: number;
-    isOtherMonth: boolean;
-}
+export type { CalendarDay } from "$lib/types/ui";
+import type { CalendarDay } from "$lib/types/ui";
 
 /** "YYYY-MM-DD" 형식의 날짜 키 생성 */
 export function dateKey(year: number, month: number, day: number): string {

@@ -3,7 +3,7 @@
  * AI 추천에 사용되는 메뉴 점수 계산, 텍스트 생성, 응답 파싱 로직
  */
 
-import type { Category, MenuItem } from "$lib/services/db";
+import type { Category, MenuItem } from "$lib/types/models";
 
 /** 점수 계산 설정값 — 여기서 가중치를 조정하세요 */
 export const SCORE_CONFIG = {

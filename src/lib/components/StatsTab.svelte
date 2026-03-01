@@ -1,12 +1,9 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import {
-        fetchCategories,
-        fetchMenuItems,
-        fetchMealData,
-        type Category,
-        type MenuItem,
-    } from "$lib/services/db";
+    import { fetchCategories } from "$lib/services/categories";
+    import { fetchMenuItems } from "$lib/services/menuItems";
+    import { fetchMealData } from "$lib/services/mealData";
+    import type { Category, MenuItem } from "$lib/types/models";
 
     let categories: Category[] = [];
     let menuItems: MenuItem[] = [];

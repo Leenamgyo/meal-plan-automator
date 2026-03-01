@@ -1,9 +1,6 @@
 /**
- * 공유 UI 인터페이스
- * 도메인 타입은 $lib/services/db 에서 export됩니다.
+ * 타입 진입점 — 모든 공유 타입을 여기서 re-export
  */
 
-export interface Message {
-    role: "user" | "ai";
-    text: string;
-}
+export type { Category, MenuItem, MealRecord, Prompt } from "./models";
+export type { Message, CalendarDay } from "./ui";

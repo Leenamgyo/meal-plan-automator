@@ -6,8 +6,8 @@
         deleteCategory,
         updateCategory,
         fetchCategories,
-        type Category,
-    } from "$lib/services/db";
+    } from "$lib/services/categories";
+    import type { Category } from "$lib/types/models";
     import { moveItemUp, moveItemDown } from "$lib/utils/arrayUtils";
 
     let saveMsgVisible = false;

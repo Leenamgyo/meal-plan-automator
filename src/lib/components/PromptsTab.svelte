@@ -5,8 +5,8 @@
         updatePrompt,
         createPrompt,
         deletePrompt,
-        type Prompt,
-    } from "$lib/services/db";
+    } from "$lib/services/prompts";
+    import type { Prompt } from "$lib/types/models";
 
     const SYSTEM_PROMPT_IDS = new Set(["json_parser", "chat_base", "auto_gen"]);
 

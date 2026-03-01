@@ -1,15 +1,14 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { hangulIncludes } from "$lib/utils/hangul";
+    import { fetchCategories } from "$lib/services/categories";
     import {
-        fetchCategories,
         fetchMenuItems,
         createMenuItem,
         updateMenuItem,
         deleteMenuItem,
-        type Category,
-        type MenuItem,
-    } from "$lib/services/db";
+    } from "$lib/services/menuItems";
+    import type { Category, MenuItem } from "$lib/types/models";
 
     let menuItems: MenuItem[] = [];
     let categories: Category[] = [];

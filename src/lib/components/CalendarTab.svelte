@@ -1,22 +1,17 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { askGemini } from "$lib/services/gemini";
+    import { askGemini } from "$lib/services/mealService";
     import { PUBLIC_GEMINI_API_KEY } from "$env/static/public";
-    import {
-        fetchCategories,
-        fetchMenuItems,
-        fetchMealData,
-        saveMealForDate,
-        fetchPrompts,
-        type Category,
-        type MenuItem,
-        type Prompt,
-    } from "$lib/services/db";
+    import { fetchCategories } from "$lib/services/categories";
+    import { fetchMenuItems } from "$lib/services/menuItems";
+    import { fetchMealData, saveMealForDate } from "$lib/services/mealData";
+    import { fetchPrompts } from "$lib/services/prompts";
+    import type { Category, MenuItem, Prompt } from "$lib/types/models";
+    import type { Message, CalendarDay } from "$lib/types/ui";
     import {
         buildCalendarDays,
         dateKey as _dateKey,
         isToday as _isToday,
-        type CalendarDay,
     } from "$lib/utils/calendarUtils";
     import {
         getWindowDates,
@@ -27,7 +22,6 @@
         parseAIMenuResponse,
     } from "$lib/services/mealGeneration";
     import { geminiKey } from "$lib/stores";
-    import type { Message } from "$lib/types/index";
 
     let currentDate = new Date();
     let mealData: Record<string, string[]> = {};
