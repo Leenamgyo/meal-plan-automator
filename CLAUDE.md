@@ -23,6 +23,19 @@ npm run dist
 
 There are no lint or test commands configured in this project.
 
+## CLAUDE.md 업데이트 규칙
+
+다음에 해당하는 변경이 생기면 **즉시 이 파일을 업데이트**한다:
+
+- 디렉토리 구조 또는 파일 위치 변경 (이동, 신규, 삭제)
+- 새 서비스 / 유틸 / 스토어 추가
+- import 규칙 변경 (어떤 모듈에서 무엇을 가져와야 하는지)
+- 아키텍처 레이어 책임 변경 (예: 도메인 로직이 다른 파일로 이동)
+- 탭 컴포넌트 추가 / 제거
+- 환경변수 또는 빌드 프로세스 변경
+
+---
+
 ## Versioning & Changelog
 
 This project uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
@@ -40,6 +53,21 @@ When committing a meaningful batch of changes:
 - `Changed` — changes to existing functionality
 - `Fixed` — bug fixes
 - `Removed` — removed features
+
+---
+
+## Slash Commands (Skills)
+
+반복 워크플로우는 스킬로 등록되어 있다. 해당 상황이 되면 직접 실행하거나 사용자에게 제안한다.
+
+| 커맨드 | 실행 시점 | 인자 |
+|---|---|---|
+| `/plan [기능 설명]` | 새 기능/탭/아키텍처 변경 **구현 전** | 기능 설명 (필수) |
+| `/review` | 작업 완료 **직전** 최종 점검 | 없음 |
+| `/debug [에러]` | 동일 오류 **2회 이상** 반복 시 | 에러 메시지 (필수) |
+| `/release [patch\|minor\|major]` | 의미 있는 변경 묶음 **완료 후** | 타입 생략 시 자동 판단 |
+
+스킬 파일 위치: `.claude/commands/`
 
 ---
 
@@ -117,10 +145,10 @@ use gemini to analyze @main.cjs — focus on IPC handlers and renderer communica
 use gemini to trace state flow in @src/routes/ @src/lib/ — find reactivity issues
 
 # SQLite 스키마 불일치
-use gemini to compare schema in @main.cjs with client usage in @src/lib/db.ts
+use gemini to compare schema in @main.cjs with client usage in @src/lib/services/
 
 # Gemini 프롬프트 개선
-use gemini to suggest improvements for prompts in @src/lib/gemini.ts — reference prompts table structure
+use gemini to suggest improvements for prompts in @src/lib/services/mealService.ts — reference prompts table structure
 ```
 
 ---
@@ -147,7 +175,43 @@ Embedded HTTP server (main.cjs)
 meal-chart.db (SQLite, in project root)
 ```
 
-The `src/lib/db.ts` module is the sole HTTP client layer—all CRUD operations go through it. On API failure, it falls back to `localStorage` as an offline cache.
+### Frontend Source Structure
+
+```
+src/lib/
+├── types/
+│   ├── index.ts          # 모든 타입 re-export 진입점
+│   ├── models.ts         # DB 스키마 모델 (Category, MenuItem, MealRecord, Prompt)
+│   └── ui.ts             # UI 전용 타입 (Message, CalendarDay)
+├── services/
+│   ├── db.ts             # 순수 HTTP 클라이언트 (apiGet, apiPost, apiPut, apiDelete)
+│   ├── categories.ts     # Category CRUD + localStorage 폴백
+│   ├── menuItems.ts      # MenuItem CRUD + localStorage 폴백
+│   ├── mealData.ts       # MealData CRUD + localStorage 폴백
+│   ├── prompts.ts        # Prompt CRUD + localStorage 폴백
+│   ├── gemini.ts         # 순수 Gemini API 클라이언트 (callGeminiText)
+│   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, convertMealText)
+│   └── mealGeneration.ts # AI 추천 순수 함수 (점수 계산, 프롬프트 빌드)
+├── utils/
+│   ├── hangul.ts         # 한글 초성 검색 (hangulIncludes)
+│   ├── calendarUtils.ts  # 달력 날짜 계산 (buildCalendarDays, dateKey, isToday)
+│   └── arrayUtils.ts     # 배열 순서 변경 (moveItemUp, moveItemDown, swapItems)
+├── stores/
+│   └── index.ts          # geminiKey writable store
+└── components/
+    ├── CalendarTab.svelte
+    ├── MenuTab.svelte
+    ├── StatsTab.svelte
+    ├── SettingsTab.svelte
+    └── PromptsTab.svelte
+```
+
+**Import 규칙:**
+- 타입 → `$lib/types/models` 또는 `$lib/types/ui` (또는 배럴 `$lib/types`)
+- HTTP 인프라 → `$lib/services/db`
+- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts}`
+- AI → `$lib/services/gemini` (순수 API) 또는 `$lib/services/mealService` (도메인)
+- 상태 → `$lib/stores` (`geminiKey` store, prop drilling 없음)
 
 ### SQLite Schema (auto-created in `main.cjs`)
 
@@ -158,7 +222,7 @@ The `src/lib/db.ts` module is the sole HTTP client layer—all CRUD operations g
 | `meal_data` | `date` (UNIQUE), `menus` (JSON array of menu names) | Upsert on conflict |
 | `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | Gemini prompt templates, seeded at startup |
 
-### Frontend Structure
+### Tab Components
 
 Single-page app with tab-based navigation in `src/routes/+page.svelte`. The active tab is tracked with a local `activeTab` variable — no router.
 
@@ -167,17 +231,16 @@ Single-page app with tab-based navigation in `src/routes/+page.svelte`. The acti
 | `CalendarTab.svelte` | Monthly calendar view + right panel for daily meal selection + AI chat |
 | `MenuTab.svelte` | Full CRUD for menu items (card grid) |
 | `StatsTab.svelte` | Category/ingredient statistics dashboard |
-| `SettingsTab.svelte` | Gemini API key input, category color management, prompt editing |
-
-The `geminiKey` is stored in `localStorage` and passed as a prop from `+page.svelte` to `CalendarTab` and `SettingsTab`.
+| `SettingsTab.svelte` | API key, category management, general settings |
+| `PromptsTab.svelte` | Prompt CRUD (system prompts: json_parser, chat_base, auto_gen) |
 
 ### Gemini AI Integration
 
-`src/lib/gemini.ts` exports two functions:
-- `convertMealText()` — Parses free-form meal text into structured JSON using the `json_parser` prompt from DB.
-- `askGemini()` — General chat using the `chat_base` prompt from DB.
+- `gemini.ts` — `callGeminiText(prompt, systemInstruction, apiKey)`: 순수 API 호출, 도메인 지식 없음
+- `mealService.ts` — `askGemini()`, `convertMealText()`: DB 프롬프트 조회 + 메뉴 제약 주입
+- `mealGeneration.ts` — 날짜 창 계산, 점수 산출, 프롬프트 문자열 생성, 응답 파싱
 
-The `auto_gen` prompt in the DB is used by `CalendarTab` for automatic meal generation with frequency-based deduplication. Prompts are editable via the Settings tab and stored in the `prompts` table. Model used: `gemini-2.5-flash-lite`.
+`geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. 환경변수 `PUBLIC_GEMINI_API_KEY`보다 런타임 키가 우선.
 
 ### Environment Variables
 
@@ -187,11 +250,9 @@ Create `.env` from `.env.example`:
 PUBLIC_GEMINI_API_KEY=your_key_here
 ```
 
-The API key can also be set at runtime via the Settings tab and is persisted in `localStorage` as `geminiKey`. The runtime key takes precedence over the env variable.
-
 ### Korean Text Search
 
-`src/lib/hangul.ts` provides Korean phoneme decomposition for fuzzy search within the menu selection panel.
+`src/lib/utils/hangul.ts` provides Korean phoneme decomposition for fuzzy search within the menu selection panel.
 
 ### Build Notes
 
