@@ -701,7 +701,7 @@ textarea.mac-textarea:focus {
 }
 
 .menu-name {
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 500;
     min-width: 120px;
 }
@@ -1230,7 +1230,7 @@ textarea.mac-textarea:focus {
 }
 
 .cell-menu-item {
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     color: #495057;
     padding: 1px 4px;
     border-radius: 3px;

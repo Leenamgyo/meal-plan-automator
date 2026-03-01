@@ -10,6 +10,7 @@ export interface Category {
     id: number;
     name: string;
     color: string;
+    sort_order?: number;
 }
 
 export interface MenuItem {
@@ -23,6 +24,14 @@ export interface MealRecord {
     id?: number;
     date: string;
     menus: string[];
+}
+
+export interface Prompt {
+    id: string;
+    version: string;
+    description: string;
+    content: string;
+    is_active: number;
 }
 
 // ===================== Categories =====================
@@ -51,7 +60,7 @@ export async function createCategory(name: string, color: string): Promise<Categ
     }
 }
 
-export async function updateCategory(id: number, data: { name?: string; color?: string }): Promise<boolean> {
+export async function updateCategory(id: number, data: { name?: string; color?: string; sort_order?: number }): Promise<boolean> {
     try {
         const res = await fetch(`${API_BASE}/api/categories/${id}`, {
             method: 'PUT',
@@ -151,6 +160,31 @@ export async function saveMealForDate(date: string, menus: string[]): Promise<bo
     }
 }
 
+// ===================== Prompts =====================
+
+export async function fetchPrompts(): Promise<Prompt[]> {
+    try {
+        const res = await fetch(`${API_BASE}/api/prompts`);
+        if (!res.ok) throw new Error('fetch failed');
+        return await res.json();
+    } catch {
+        return getLocalPrompts();
+    }
+}
+
+export async function updatePrompt(id: string, data: { content?: string; version?: string; is_active?: number }): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_BASE}/api/prompts/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
 // ===================== localStorage Fallback =====================
 
 function getLocalCategories(): Category[] {
@@ -166,4 +200,9 @@ function getLocalMenuItems(): MenuItem[] {
 function getLocalMealData(): Record<string, string[]> {
     const saved = localStorage.getItem('mealData');
     return saved ? JSON.parse(saved) : {};
+}
+
+function getLocalPrompts(): Prompt[] {
+    const saved = localStorage.getItem('prompts');
+    return saved ? JSON.parse(saved) : [];
 }
