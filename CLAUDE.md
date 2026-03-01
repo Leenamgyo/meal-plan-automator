@@ -23,6 +23,24 @@ npm run dist
 
 There are no lint or test commands configured in this project.
 
+## Versioning & Changelog
+
+This project uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
+- `PATCH` — bug fixes, minor tweaks
+- `MINOR` — new features, UI improvements, non-breaking changes
+- `MAJOR` — breaking architecture changes
+
+When committing a meaningful batch of changes:
+1. Bump `version` in `package.json`
+2. Add an entry to `CHANGELOG.md` under a new `## [x.y.z] - YYYY-MM-DD` heading
+3. Commit with `git tag vX.Y.Z` after the commit
+
+**CHANGELOG.md categories to use:**
+- `Added` — new features
+- `Changed` — changes to existing functionality
+- `Fixed` — bug fixes
+- `Removed` — removed features
+
 ## AI Collaboration Workflow
 
 Gemini MCP is connected. Use it at the right moments — not for everything, but for the cases below.
