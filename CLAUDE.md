@@ -137,4 +137,4 @@ The API key can also be set at runtime via the Settings tab and is persisted in 
 
 ### Build Notes
 
-The `npm run build` script patches `build/index.html` after the SvelteKit build to convert absolute `/_app` paths to relative `./_app` paths, which is required for Electron's file loading to work correctly.
+The `npm run build` script patches `build/index.html` after the SvelteKit build to convert absolute `/_app` paths to relative `./_app` paths, which is required for Electron's file loading to work correctly.  

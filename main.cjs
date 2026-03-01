@@ -82,30 +82,31 @@ function initDatabase() {
     },
     {
       id: "auto_gen",
-      description: "달력 단일 일자 식단 8메뉴 자동 구성 프롬프트 (빈도 기반 중복 회피)",
-      content: `당신은 구내식당 영양사입니다. 아래 규칙을 **반드시** 지키면서 한 끼 식단(총 8가지)을 구성하세요.
+      description: "달력 단일 일자 식단 8메뉴 자동 구성 프롬프트 (점수표 기반 중복 회피)",
+      content: `당신은 구내식당 영양사입니다. 아래 규칙을 **반드시** 지키면서 점심 식단(총 8가지)을 구성하세요.
 
 ## 카테고리별 구성 규칙
 - 밥 카테고리: 1개
 - 국/찌개 카테고리: 1개
 - 주메뉴 카테고리: 1~2개
 - 부메뉴 카테고리: 2~3개
-- 밑반찬 카테고리: 3개
+- 밑반찬 카테고리: 2~3개
 - 김치/기타 카테고리: 1개
-※ 총합이 반드시 8개가 되어야 합니다. 부메뉴/주메뉴 개수로 조절하세요.
+※ 총합이 반드시 8개가 되어야 합니다. 주메뉴·부메뉴·밑반찬 개수로 조절하세요.
 
-## 중복 회피 규칙 (매우 중요!)
-아래 빈도 데이터는 최근 30일간 각 메뉴가 몇 번 등장했는지를 나타냅니다.
-- 등장 횟수가 높은 메뉴일수록 선택을 **강하게 피해주세요**.
-- 같은 카테고리 안에서 등장 횟수가 0회인 메뉴가 있다면 그것을 **우선** 선택하세요.
-- 밥/김치처럼 매일 나오는 종류는 예외로 두되, 다양한 종류를 돌려가며 선택합니다.
+## 메뉴 추천 점수 활용 (매우 중요!)
+아래 점수표는 이 날짜 기준 ±30일 내 데이터를 분석한 결과입니다 (0~100점).
+- **점수가 높은 메뉴를 우선 선택**하세요.
+- 점수가 낮을수록 인근 날짜에 자주 나온 메뉴이므로 피해주세요.
+- 0점 메뉴는 절대 선택하지 마세요.
+- 같은 점수라면 ±일수가 더 큰 (오래된) 메뉴를 고르세요.
 
 {frequencyData}
 
 ## 가용한 메뉴 목록 (카테고리별)
 {availableMenusText}
 
-## 최근 식단 이력 (참고)
+## 직전 7일 식단 이력 (맥락 참고)
 {recentMealsText}
 
 ## 절대 규칙
@@ -117,15 +118,23 @@ function initDatabase() {
     }
   ];
 
+  // json_parser, chat_base는 사용자 편집 보존 (DO NOTHING)
   const insertPrompt = db.prepare(`
-    INSERT INTO prompts (id, description, content) 
-    VALUES (?, ?, ?) 
+    INSERT INTO prompts (id, description, content)
+    VALUES (?, ?, ?)
     ON CONFLICT(id) DO NOTHING
   `);
-
-  for (const p of seedPrompts) {
+  for (const p of seedPrompts.filter(p => p.id !== 'auto_gen')) {
     insertPrompt.run(p.id, p.description, p.content);
   }
+
+  // auto_gen은 코드와 강하게 결합되어 있으므로 항상 최신 버전으로 갱신
+  const autoGen = seedPrompts.find(p => p.id === 'auto_gen');
+  db.prepare(`
+    INSERT INTO prompts (id, description, content)
+    VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET content = excluded.content, description = excluded.description
+  `).run(autoGen.id, autoGen.description, autoGen.content);
 
   try {
     // 마이그레이션: 기존 DB에 sort_order 컬럼이 없으면 추가
@@ -290,6 +299,17 @@ async function handleAPI(req, res) {
     return sendJSON(res, rows);
   }
 
+  if (url === '/api/prompts' && method === 'POST') {
+    const body = await parseBody(req);
+    if (!body.id || !body.content) return sendJSON(res, { error: 'id and content required' }, 400);
+    const existing = db.prepare('SELECT id FROM prompts WHERE id = ?').get(body.id);
+    if (existing) return sendJSON(res, { error: 'id already exists' }, 409);
+    db.prepare('INSERT INTO prompts (id, description, content, version, is_active) VALUES (?, ?, ?, ?, ?)')
+      .run(body.id, body.description || '', body.content, body.version || '1.0', body.is_active ?? 1);
+    const row = db.prepare('SELECT * FROM prompts WHERE id = ?').get(body.id);
+    return sendJSON(res, row);
+  }
+
   const promptMatch = url.match(/^\/api\/prompts\/(.+)$/);
   if (promptMatch && method === 'PUT') {
     const id = decodeURIComponent(promptMatch[1]);
@@ -307,6 +327,12 @@ async function handleAPI(req, res) {
 
     const row = db.prepare('SELECT * FROM prompts WHERE id = ?').get(id);
     return sendJSON(res, row);
+  }
+
+  if (promptMatch && method === 'DELETE') {
+    const id = decodeURIComponent(promptMatch[1]);
+    db.prepare('DELETE FROM prompts WHERE id = ?').run(id);
+    return sendJSON(res, { success: true });
   }
 
   // API 404

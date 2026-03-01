@@ -185,6 +185,26 @@ export async function updatePrompt(id: string, data: { content?: string; version
     }
 }
 
+export async function createPrompt(data: { id: string; description?: string; content: string; version?: string }): Promise<Prompt> {
+    const res = await fetch(`${API_BASE}/api/prompts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'create failed');
+    return json;
+}
+
+export async function deletePrompt(id: string): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_BASE}/api/prompts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
 // ===================== localStorage Fallback =====================
 
 function getLocalCategories(): Category[] {

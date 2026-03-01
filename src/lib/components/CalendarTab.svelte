@@ -53,6 +53,7 @@
     let chatInput = "";
     let chatMessages: Message[] = [];
     let isConverting = false;
+    let chatMessagesEl: HTMLElement;
 
     async function handleChatSend() {
         if (!chatInput.trim() || isConverting) return;
@@ -88,8 +89,7 @@
         } finally {
             isConverting = false;
             setTimeout(() => {
-                const el = document.querySelector(".side-chat-messages");
-                if (el) el.scrollTop = el.scrollHeight;
+                if (chatMessagesEl) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
             }, 10);
         }
     }
@@ -224,18 +224,48 @@
     async function autoGenerateMeal() {
         if (!selectedDate || isConverting) return;
 
+        // 비동기 처리 중 selectedDate가 바뀌어도 처음 클릭한 날짜에 저장
+        const targetDate = selectedDate;
+
         const apiKey = PUBLIC_GEMINI_API_KEY || geminiKey;
         if (!apiKey) {
             alert("환경설정에서 Gemini API 키를 먼저 입력해주세요.");
             return;
         }
 
+        const autoGenPrompt =
+            prompts.find((p) => p.id === "auto_gen")?.content || "";
+        if (!autoGenPrompt) {
+            alert("auto_gen 프롬프트를 DB에서 불러오지 못했습니다. 앱을 재시작해주세요.");
+            return;
+        }
+
         isConverting = true;
         try {
-            // Group menus by category name for better AI understanding
+            // ── 점수 가중치 (추후 Settings에서 조정 가능하도록 한 곳에 모음) ──
+            const SCORE_BASE = 100;
+            const FREQ_PENALTY = 10;      // 등장 1회당 차감
+            const RECENCY_THRESHOLD = 7;  // 이 일수 이내면 근접 패널티 적용
+            const RECENCY_PENALTY = 20;   // 근접 패널티
+
+            // ── ±30일 날짜 창 ──
+            const selectedDateObj = new Date(targetDate);
+            const windowStart = new Date(selectedDateObj);
+            windowStart.setDate(windowStart.getDate() - 30);
+            const windowEnd = new Date(selectedDateObj);
+            windowEnd.setDate(windowEnd.getDate() + 30);
+
+            const windowDates = Object.keys(mealData).filter((d) => {
+                if (!mealData[d].length || d === targetDate) return false;
+                const dObj = new Date(d);
+                return dObj >= windowStart && dObj <= windowEnd;
+            });
+
+            // ── 카테고리 매핑 ──
             const categoryMap = new Map<number, string>();
             categories.forEach((c) => categoryMap.set(c.id, c.name));
 
+            // ── 가용 메뉴 목록 (카테고리별) ──
             const groupedMenus: Record<string, string[]> = {};
             menuItems.forEach((m) => {
                 const catName = m.category_id
@@ -244,62 +274,97 @@
                 if (!groupedMenus[catName]) groupedMenus[catName] = [];
                 groupedMenus[catName].push(m.name);
             });
-
-            let availableMenusText =
-                "--- 가용한 사용자 메뉴 목록 (카테고리별) ---\n";
+            let availableMenusText = "";
             for (const [cat, menus] of Object.entries(groupedMenus)) {
                 availableMenusText += `[${cat}]: ${menus.join(", ")}\n`;
             }
 
-            // Get recent meals as context for the AI
-            const recentDates = Object.keys(mealData)
-                .filter((d) => mealData[d].length > 0 && d !== selectedDate)
+            // ── 직전 7일 이력 (맥락용) ──
+            const past7Days = windowDates
+                .filter((d) => new Date(d) < selectedDateObj)
                 .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-                .slice(0, 30); // up to 30 recent meal records
-
+                .slice(0, 7);
             let recentMealsText = "";
-            if (recentDates.length > 0) {
-                recentMealsText =
-                    "\n--- 참고: 최근 사용자의 식단 조합 예시 ---\n";
-                for (const d of recentDates) {
+            if (past7Days.length > 0) {
+                for (const d of past7Days) {
                     recentMealsText += `[${d}]: ${mealData[d].join(", ")}\n`;
                 }
-                recentMealsText +=
-                    "위의 최근 조합들을 참고하여, 메뉴들이 조화롭게 어울리도록 구성하되 직전 날짜와 메인 메뉴가 너무 똑같이 겹치지 않도록 골고루 섞어주세요.\n";
-            }
-
-            // Calculate menu frequency from recent meals
-            const frequencyMap: Record<string, number> = {};
-            for (const d of recentDates) {
-                for (const menu of mealData[d]) {
-                    frequencyMap[menu] = (frequencyMap[menu] || 0) + 1;
-                }
-            }
-            let frequencyData = "--- 최근 30일 메뉴 등장 빈도 ---\n";
-            const sortedFreq = Object.entries(frequencyMap).sort(
-                (a, b) => b[1] - a[1],
-            );
-            if (sortedFreq.length === 0) {
-                frequencyData += "(식단 이력 없음)\n";
             } else {
-                for (const [menu, count] of sortedFreq) {
-                    frequencyData += `- ${menu}: ${count}회\n`;
+                recentMealsText = "(최근 식단 이력 없음)";
+            }
+
+            // ── 메뉴별 점수 계산 ──
+            interface MenuScore {
+                name: string;
+                score: number;
+                freq: number;
+                closestDays: number | null;
+            }
+            const categoryScores: Record<string, MenuScore[]> = {};
+
+            for (const m of menuItems) {
+                const catName = m.category_id
+                    ? categoryMap.get(m.category_id) || "미분류"
+                    : "미분류";
+
+                let freq = 0;
+                let closestDays: number | null = null;
+
+                for (const d of windowDates) {
+                    if (mealData[d].includes(m.name)) {
+                        freq++;
+                        const absDays = Math.round(
+                            Math.abs(
+                                new Date(d).getTime() -
+                                    selectedDateObj.getTime(),
+                            ) /
+                                (1000 * 60 * 60 * 24),
+                        );
+                        if (closestDays === null || absDays < closestDays) {
+                            closestDays = absDays;
+                        }
+                    }
+                }
+
+                let score = SCORE_BASE - freq * FREQ_PENALTY;
+                if (closestDays !== null && closestDays <= RECENCY_THRESHOLD) {
+                    score -= RECENCY_PENALTY;
+                }
+                score = Math.max(0, score);
+
+                if (!categoryScores[catName]) categoryScores[catName] = [];
+                categoryScores[catName].push({
+                    name: m.name,
+                    score,
+                    freq,
+                    closestDays,
+                });
+            }
+
+            // 카테고리 내 점수 내림차순 정렬
+            for (const cat of Object.keys(categoryScores)) {
+                categoryScores[cat].sort((a, b) => b.score - a.score);
+            }
+
+            // ── 점수표 문자열 생성 ──
+            let frequencyData = `[계산 기준: 기본 ${SCORE_BASE}점 / 등장 -${FREQ_PENALTY}점/회 / ${RECENCY_THRESHOLD}일 이내 추가 -${RECENCY_PENALTY}점]\n\n`;
+            for (const [cat, scores] of Object.entries(categoryScores)) {
+                frequencyData += `[${cat}]\n`;
+                for (const s of scores) {
+                    const lastStr =
+                        s.closestDays !== null
+                            ? `±${s.closestDays}일 이내 ${s.freq}회`
+                            : "미사용";
+                    frequencyData += `  ${s.name}: ${s.score}점 (${lastStr})\n`;
                 }
             }
 
-            const autoGenPrompt =
-                prompts.find((p) => p.id === "auto_gen")?.content || "";
-            if (!autoGenPrompt) {
-                throw new Error("auto_gen 프롬프트를 DB에서 불러오지 못했습니다. 앱을 재시작해주세요.");
-            }
+            const allMenuNames = menuItems.map((m) => m.name);
             const promptContextStr = autoGenPrompt
                 .replace("{frequencyData}", frequencyData)
                 .replace("{recentMealsText}", recentMealsText)
                 .replace("{availableMenusText}", availableMenusText);
 
-            // For askGemini, we skip passing the basic availableMenus array because we already embedded the grouped string in the prompt.
-            // But to preserve the final fallback constraint in gemini.ts, we can pass all names as a flat array.
-            const allMenuNames = menuItems.map((m) => m.name);
             const aiResponse = await askGemini(
                 promptContextStr,
                 apiKey,
@@ -307,31 +372,28 @@
                 prompts,
             );
 
-            // Parse response: handle commas, newlines, and bullet points (e.g. -, *, 1.)
+            // 응답 파싱: 쉼표, 줄바꿈, 번호/불릿 처리
             const rawMenus = aiResponse.split(/,|\n|- |\* |\d+\.\s*/);
             const generatedMenus = rawMenus
                 .map((m) => m.trim())
                 .filter((m) => m.length > 0);
 
-            const currentMeals = mealData[selectedDate] || [];
             let updatedMeals: string[] = [];
-
-            let addedCount = 0;
             for (const menu of generatedMenus) {
-                // Verify AI didn't hallucinate
-                const matchedMenu = allMenuNames.find((m) => m.trim() === menu);
-                if (matchedMenu && !updatedMeals.includes(matchedMenu)) {
-                    updatedMeals.push(matchedMenu);
-                    addedCount++;
+                const matched = allMenuNames.find((n) => n.trim() === menu);
+                if (matched && !updatedMeals.includes(matched)) {
+                    updatedMeals.push(matched);
                 }
             }
 
-            if (addedCount > 0) {
-                mealData = { ...mealData, [selectedDate]: updatedMeals };
-                saveMealData();
+            if (updatedMeals.length > 0) {
+                mealData = { ...mealData, [targetDate]: updatedMeals };
+                // localStorage는 전체 갱신, DB는 targetDate로 명시 저장
+                localStorage.setItem("mealData", JSON.stringify(mealData));
+                saveMealForDate(targetDate, updatedMeals);
             } else {
                 alert(
-                    "AI가 추천한 메뉴들 중 기존에 이미 전부 등록되어 있거나, 보유하신 메뉴 목록에 없는 요리를 AI가 임의로 추천하여 제외되었습니다.\n다른 방식으로 다시 시도해보세요.",
+                    "AI가 추천한 메뉴가 메뉴 목록에 없거나 파싱에 실패했습니다.\n다시 시도해보세요.",
                 );
             }
         } catch (error: any) {
@@ -353,9 +415,10 @@
 
     function clearAllMealsDate(dateStr?: string) {
         const targetDate = dateStr || selectedDate;
-        if (!targetDate) return;
+        if (!targetDate || typeof targetDate !== "string") return;
         mealData = { ...mealData, [targetDate]: [] };
-        saveMealData();
+        localStorage.setItem("mealData", JSON.stringify(mealData));
+        saveMealForDate(targetDate, []);
     }
 
     // Drag and drop state
@@ -460,69 +523,69 @@
     function nextMonth() {
         currentDate = new Date(year, month + 1, 1);
     }
+    function goToToday() {
+        currentDate = new Date();
+    }
 </script>
 
 <div class="calendar-layout">
     <!-- Left: Calendar -->
     <div class="calendar-main">
         <div class="meal-schedule">
-            <div class="schedule-header">
-                <div class="schedule-nav">
-                    <button
-                        class="sch-nav-btn"
-                        on:click={prevMonth}
-                        aria-label="이전 달">‹</button
-                    >
-                    <h2 class="sch-title">{monthName} 식단표</h2>
-                    <button
-                        class="sch-nav-btn"
-                        on:click={nextMonth}
-                        aria-label="다음 달">›</button
-                    >
-                </div>
-            </div>
 
-            <!-- Calendar-level Filter Bar -->
-            <div class="calendar-filter-bar">
-                <div class="search-bar cal-search">
-                    <span class="search-icon">🔍</span>
-                    <input
-                        type="text"
-                        placeholder="달력 내 메뉴 검색"
-                        bind:value={calendarSearchText}
-                        class="search-input"
-                    />
+            <!-- ── 통합 헤더 바 ── -->
+            <div class="sch-header-bar">
+                <div class="sch-nav-group">
+                    <button class="sch-nav-btn" on:click={prevMonth} aria-label="이전 달">‹</button>
+                    <h2 class="sch-title">{monthName}</h2>
+                    <button class="sch-nav-btn" on:click={nextMonth} aria-label="다음 달">›</button>
+                    <button class="btn-today" on:click={goToToday}>오늘</button>
                 </div>
-                <div class="tag-filter-bar cal-tags">
-                    <button
-                        class="tag-filter-chip"
-                        class:active={calendarCategoryFilter === null}
-                        on:click={() => (calendarCategoryFilter = null)}
-                        >전체</button
-                    >
-                    {#each categories as cat}
+
+                <div class="sch-filter-group">
+                    <div class="cal-search-wrap">
+                        <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="메뉴 검색"
+                            bind:value={calendarSearchText}
+                            class="cal-search-input"
+                        />
+                        {#if calendarSearchText}
+                            <button class="cal-search-clear" on:click={() => (calendarSearchText = "")}>×</button>
+                        {/if}
+                    </div>
+
+                    <div class="cat-chips-scroll">
                         <button
-                            class="tag-filter-chip"
-                            class:active={calendarCategoryFilter === cat.id}
-                            style={calendarCategoryFilter === cat.id
-                                ? `background-color: ${cat.color}; color: white; border-color: ${cat.color};`
-                                : ""}
-                            on:click={() =>
-                                toggleCalendarCategoryFilter(cat.id)}
-                            >{cat.name}</button
-                        >
-                    {/each}
+                            class="cat-chip"
+                            class:active={calendarCategoryFilter === null}
+                            on:click={() => (calendarCategoryFilter = null)}
+                        >전체</button>
+                        {#each categories as cat}
+                            <button
+                                class="cat-chip"
+                                class:active={calendarCategoryFilter === cat.id}
+                                style={calendarCategoryFilter === cat.id
+                                    ? `background:${cat.color}; color:#fff; border-color:${cat.color};`
+                                    : `border-left: 3px solid ${cat.color};`}
+                                on:click={() => toggleCalendarCategoryFilter(cat.id)}
+                            >{cat.name}</button>
+                        {/each}
+                    </div>
                 </div>
             </div>
 
+            <!-- ── 요일 헤더 ── -->
             <div class="sch-weekdays">
                 {#each weekDays as wd, i}
-                    <div class="sch-wd" class:sun={i === 0} class:sat={i === 6}>
-                        {wd}
-                    </div>
+                    <div class="sch-wd" class:sun={i === 0} class:sat={i === 6}>{wd}</div>
                 {/each}
             </div>
 
+            <!-- ── 달력 그리드 ── -->
             <div class="sch-grid" style="--rows: {totalRows};">
                 {#each calendarDays as cd, idx}
                     <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -530,51 +593,38 @@
                     <div
                         class="sch-cell"
                         class:other-month={cd.isOtherMonth}
-                        class:today={isToday(cd)}
                         class:weekend={isWeekend(idx)}
-                        class:selected={!cd.isOtherMonth &&
-                            dateKey(cd.day) === selectedDate}
+                        class:selected={!cd.isOtherMonth && dateKey(cd.day) === selectedDate}
                         on:click={() => selectDate(cd)}
                     >
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;"
-                        >
-                            <div
+                        <!-- 날짜 번호 -->
+                        <div class="cell-top">
+                            <span
                                 class="cell-day"
                                 class:sun={idx % 7 === 0}
                                 class:sat={idx % 7 === 6}
-                            >
-                                {cd.day}
-                            </div>
+                                class:today-num={isToday(cd)}
+                            >{cd.day}</span>
 
-                            {#if !cd.isOtherMonth && mealData[dateKey(cd.day)] && mealData[dateKey(cd.day)].length > 0}
-                                <button
-                                    class="btn-mac btn-cell-clear"
-                                    style="padding: 1px 4px; font-size: 0.6rem; color: #888; border: none; background: transparent; box-shadow: none;"
-                                    title="이 날의 메뉴 전체 삭제"
-                                    on:click|stopPropagation={() =>
-                                        clearAllMealsDate(dateKey(cd.day))}
-                                >
-                                    ✕
-                                </button>
+                            {#if !cd.isOtherMonth && mealData[dateKey(cd.day)]?.length > 0}
+                                <div class="cell-top-right">
+                                    <span class="cell-count">{mealData[dateKey(cd.day)].length}</span>
+                                    <button
+                                        class="cell-clear-btn"
+                                        title="이 날 식단 전체 삭제"
+                                        on:click|stopPropagation={() => clearAllMealsDate(dateKey(cd.day))}
+                                    >✕</button>
+                                </div>
                             {/if}
                         </div>
+
+                        <!-- 메뉴 이름 목록 -->
                         {#if !cd.isOtherMonth}
-                            {@const menus = getMenus(
-                                cd,
-                                mealData,
-                                calendarCategoryFilter,
-                                calendarSearchText,
-                            )}
+                            {@const menus = getMenus(cd, mealData, calendarCategoryFilter, calendarSearchText)}
                             {#if menus.length > 0}
                                 <ul class="cell-menu-list">
                                     {#each menus as menu}
-                                        <li
-                                            class="cell-menu-item"
-                                            style="--item-color: {getMenuColor(
-                                                menu,
-                                            )};"
-                                        >
+                                        <li class="cell-menu-item" style="--item-color: {getMenuColor(menu)};">
                                             {menu}
                                         </li>
                                     {/each}
@@ -588,20 +638,13 @@
     </div>
 
     <!-- Right: Meal Selection / AI Chat -->
-    <div
-        class="ai-chat-panel"
-        style="display:flex; flex-direction:column; overflow:hidden;"
-    >
+    <div class="ai-chat-panel">
         {#if selectedDate}
-            <div
-                class="ai-chat-header"
-                style="display:flex; justify-content:space-between; align-items:center;"
-            >
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span>📋 {formattedSelectedDate}</span>
+            <div class="ai-chat-header panel-header-row">
+                <div class="panel-header-left">
+                    <span class="panel-date-label">📋 {formattedSelectedDate}</span>
                     <button
-                        class="btn-mac"
-                        style="padding: 2px 8px; font-size: 0.75rem; border-radius: 12px; background: linear-gradient(to bottom, #f0f0f0, #e0e0e0); color: #333;"
+                        class="btn-ai-gen"
                         on:click={autoGenerateMeal}
                         disabled={isConverting}
                     >
@@ -615,51 +658,26 @@
                 <button class="btn-close" on:click={closePanel}>×</button>
             </div>
 
-            <div
-                class="panel-section"
-                style="height: 220px; display:flex; flex-direction:column; flex-shrink:0;"
-            >
-                <div
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;"
-                >
-                    <div
-                        style="font-weight: 600; font-size: 0.8rem; color:#555;"
-                    >
-                        등록된 식단 ({selectedDateMeals.length})
-                    </div>
+            <!-- 등록된 식단 -->
+            <div class="panel-section panel-meals-section">
+                <div class="panel-section-header">
+                    <span class="panel-section-title">등록된 식단 <span class="meal-count-badge">{selectedDateMeals.length}</span></span>
                     {#if selectedDateMeals.length > 0}
-                        <button
-                            class="btn-mac"
-                            style="padding: 2px 6px; font-size: 0.65rem;"
-                            on:click={clearAllMealsDate}
-                        >
-                            전체 삭제
-                        </button>
+                        <button class="btn-text-danger" on:click={() => clearAllMealsDate()}>전체 삭제</button>
                     {/if}
                 </div>
                 {#if selectedDateMeals.length === 0}
                     <div class="empty-state">
-                        <p style="margin:0; font-size:0.8rem; color:#888;">
-                            식단이 비어있습니다.
-                        </p>
+                        <p class="empty-state-text">식단이 비어있습니다.</p>
                     </div>
                 {:else}
-                    <div
-                        class="selected-meals"
-                        style="flex: 1; overflow-y: auto;"
-                    >
+                    <div class="selected-meals">
                         {#each selectedDateMeals as menu, index}
                             <div
                                 class="selected-meal-item"
-                                style="border-left: 3px solid {getMenuColor(
-                                    menu,
-                                )}; cursor: grab; background-color: {draggedIdx ===
-                                index
-                                    ? '#f0f0f0'
-                                    : 'white'}; {dragOverIdx === index &&
-                                draggedIdx !== index
-                                    ? 'border-top: 2px dashed #007aff; margin-top: -2px;'
-                                    : ''}"
+                                class:dragging={draggedIdx === index}
+                                class:drag-over={dragOverIdx === index && draggedIdx !== index}
+                                style="border-left: 3px solid {getMenuColor(menu)};"
                                 draggable="true"
                                 on:dragstart={(e) => handleDragStart(e, index)}
                                 on:dragover={(e) => handleDragOver(e, index)}
@@ -668,39 +686,20 @@
                                 on:dragend={handleDragEnd}
                                 role="listitem"
                             >
-                                <span
-                                    class="meal-name"
-                                    style="font-size: 0.8rem;">{menu}</span
-                                >
-                                <button
-                                    class="btn-remove-meal"
-                                    style="font-size: 0.8rem;"
-                                    on:click={() => removeMealFromDate(index)}
-                                    >×</button
-                                >
+                                <span class="meal-name">{menu}</span>
+                                <button class="btn-remove-meal" on:click={() => removeMealFromDate(index)}>×</button>
                             </div>
                         {/each}
                     </div>
                 {/if}
             </div>
 
-            <hr
-                style="border: 0; border-top: 1px solid #eee; margin: 0; flex-shrink:0;"
-            />
+            <div class="panel-divider"></div>
 
-            <div
-                class="panel-section"
-                style="flex: 1; display:flex; flex-direction:column; overflow:hidden; min-height: 0;"
-            >
-                <div
-                    style="font-weight: 600; font-size: 0.82rem; margin-bottom: 8px; color:#555; flex-shrink:0;"
-                >
-                    메뉴 선택
-                </div>
-                <div
-                    class="search-bar"
-                    style="margin-bottom: 8px; flex-shrink:0;"
-                >
+            <!-- 메뉴 선택 -->
+            <div class="panel-section panel-menu-pick-section">
+                <div class="panel-section-title" style="margin-bottom:8px; flex-shrink:0;">메뉴 선택</div>
+                <div class="search-bar" style="margin-bottom: 8px; flex-shrink:0;">
                     <span class="search-icon">🔍</span>
                     <input
                         type="text"
@@ -709,77 +708,46 @@
                         class="search-input"
                     />
                 </div>
-                <div
-                    style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; flex-shrink:0;"
-                >
-                    <div class="tag-filter-bar" style="flex:1; margin:0;">
+                <div class="tag-filter-bar" style="margin-bottom:8px; flex-shrink:0;">
+                    <button
+                        class="tag-filter-chip"
+                        class:active={activeCategoryFilter === null}
+                        on:click={() => (activeCategoryFilter = null)}
+                    >전체</button>
+                    {#each categories as cat}
                         <button
                             class="tag-filter-chip"
-                            class:active={activeCategoryFilter === null}
-                            on:click={() => (activeCategoryFilter = null)}
-                            >전체</button
-                        >
-                        {#each categories as cat}
-                            <button
-                                class="tag-filter-chip"
-                                class:active={activeCategoryFilter === cat.id}
-                                style={activeCategoryFilter === cat.id
-                                    ? `background-color: ${cat.color}; color: white; border-color: ${cat.color};`
-                                    : `border-left: 3px solid ${cat.color};`}
-                                on:click={() => toggleCategoryFilter(cat.id)}
-                                >{cat.name}</button
-                            >
-                        {/each}
-                    </div>
+                            class:active={activeCategoryFilter === cat.id}
+                            style={activeCategoryFilter === cat.id
+                                ? `background-color: ${cat.color}; color: white; border-color: ${cat.color};`
+                                : `border-left: 3px solid ${cat.color};`}
+                            on:click={() => toggleCategoryFilter(cat.id)}
+                        >{cat.name}</button>
+                    {/each}
                 </div>
-                <div class="menu-list" style="flex: 1; overflow-y: auto;">
+                <div class="menu-list">
                     {#if filteredMenuItems.length === 0}
                         <div class="empty-state">
                             <p>검색 결과가 없습니다.</p>
                         </div>
                     {:else}
                         {#each filteredMenuItems as item}
-                            {@const isAdded = selectedDateMeals.includes(
-                                item.name,
-                            )}
+                            {@const isAdded = selectedDateMeals.includes(item.name)}
                             <div class="menu-row" class:is-added={isAdded}>
                                 <div class="menu-info">
                                     <div class="menu-title-row">
-                                        <span
-                                            class="cat-dot"
-                                            style="background-color: {getMenuColor(
-                                                item.name,
-                                            )};"
-                                        ></span>
-                                        <span class="menu-name"
-                                            >{item.name}</span
-                                        >
+                                        <span class="cat-dot" style="background-color: {getMenuColor(item.name)};"></span>
+                                        <span class="menu-name">{item.name}</span>
                                     </div>
                                 </div>
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    class="menu-actions"
-                                    on:click={() => {
-                                        if (!isAdded) addMealToDate(item.name);
-                                    }}
-                                >
+                                <div class="menu-actions" on:click={() => { if (!isAdded) addMealToDate(item.name); }}>
                                     {#if isAdded}
                                         <span class="added-badge">✓</span>
                                     {:else}
-                                        <button
-                                            class="btn-icon add-btn"
-                                            aria-label="추가"
-                                        >
-                                            <svg
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                                ><path
-                                                    d="M12 5v14M5 12h14"
-                                                /></svg
-                                            >
+                                        <button class="btn-icon add-btn" aria-label="추가">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                                         </button>
                                     {/if}
                                 </div>
@@ -790,7 +758,7 @@
             </div>
         {:else}
             <div class="ai-chat-header">🤖 AI 식단 변환기</div>
-            <div class="side-chat-messages">
+            <div class="side-chat-messages" bind:this={chatMessagesEl}>
                 <div class="side-chat-msg ai">
                     날짜를 클릭하면 식단을 선택할 수 있습니다.<br />또는 식단
                     텍스트를 붙여넣으면 분석해드릴게요!

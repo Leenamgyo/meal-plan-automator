@@ -6,6 +6,7 @@
     import SettingsTab from "$lib/components/SettingsTab.svelte";
     import CalendarTab from "$lib/components/CalendarTab.svelte";
     import StatsTab from "$lib/components/StatsTab.svelte";
+    import PromptsTab from "$lib/components/PromptsTab.svelte";
 
     let activeTab = "calendar";
 
@@ -90,6 +91,16 @@
         </button>
         <button
             class="tab-btn"
+            class:active={activeTab === "prompts"}
+            on:click={() => (activeTab = "prompts")}
+        >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            프롬프트
+        </button>
+        <button
+            class="tab-btn"
             class:active={activeTab === "settings"}
             on:click={() => (activeTab = "settings")}
         >
@@ -118,6 +129,8 @@
         <CalendarTab {geminiKey} />
     {:else if activeTab === "stats"}
         <StatsTab />
+    {:else if activeTab === "prompts"}
+        <PromptsTab />
     {:else if activeTab === "settings"}
         <SettingsTab bind:geminiKey />
     {/if}

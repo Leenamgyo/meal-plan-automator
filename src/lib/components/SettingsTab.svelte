@@ -5,25 +5,22 @@
 
     let saveMsgVisible = false;
     let confirmDelete = true;
+    let activeSection: "api" | "categories" | "general" = "api";
 
     interface Category {
         id: number;
         name: string;
         color: string;
-        sort_order?: number; // Added sort_order to interface
+        sort_order?: number;
     }
 
     let categories: Category[] = [];
-    let prompts: Prompt[] = [];
 
     import {
         createCategory,
         deleteCategory,
         updateCategory,
         fetchCategories,
-        fetchPrompts,
-        updatePrompt,
-        type Prompt,
     } from "$lib/db";
 
     onMount(async () => {
@@ -31,10 +28,7 @@
         confirmDelete = cd === null ? true : cd === "true";
 
         categories = await fetchCategories();
-        // ensure existing categories without sort_order don't break
         categories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-        prompts = await fetchPrompts();
     });
 
     async function addCategory() {
@@ -73,7 +67,6 @@
         localStorage.setItem("geminiKey", geminiKey);
         localStorage.setItem("confirmDelete", String(confirmDelete));
 
-        // Update all categories in DB
         for (let i = 0; i < categories.length; i++) {
             const cat = categories[i];
             await updateCategory(cat.id, {
@@ -85,180 +78,561 @@
         }
         localStorage.setItem("menuCategories", JSON.stringify(categories));
 
-        // Update all prompts in DB
-        for (const prompt of prompts) {
-            await updatePrompt(prompt.id, {
-                content: prompt.content,
-                version: prompt.version,
-            });
-        }
-        localStorage.setItem("prompts", JSON.stringify(prompts));
-
         saveMsgVisible = true;
         setTimeout(() => {
             saveMsgVisible = false;
         }, 2000);
     }
+
+    const sectionMeta = [
+        { id: "api",        icon: "🔑", label: "API 연동" },
+        { id: "categories", icon: "🏷️", label: "카테고리" },
+        { id: "general",    icon: "⚙️", label: "일반" },
+    ] as const;
 </script>
 
-<div class="tab-content active" style="display: block; padding: 2rem;">
-    <div class="settings-container">
-        <h2>환경설정</h2>
-        <div class="subtitle">API 연동을 위한 키와 URL을 설정합니다.</div>
+<div class="settings-layout">
+    <!-- ── 왼쪽 사이드바 ── -->
+    <nav class="settings-nav">
+        <div class="nav-title">환경설정</div>
 
-        <div class="form-group">
-            <label for="gemini-key">Gemini API 키</label>
-            <input
-                type="password"
-                id="gemini-key"
-                bind:value={geminiKey}
-                placeholder="AIzaSy..."
-            />
+        {#each sectionMeta as sec}
+            <button
+                class="nav-item"
+                class:active={activeSection === sec.id}
+                on:click={() => (activeSection = sec.id)}
+            >
+                <span class="nav-icon">{sec.icon}</span>
+                {sec.label}
+            </button>
+        {/each}
+
+        <div class="nav-footer">
+            <button class="btn-save" on:click={saveSettings}>저장</button>
+            {#if saveMsgVisible}
+                <div class="save-toast">저장됨 ✓</div>
+            {/if}
         </div>
+    </nav>
 
-        <div class="form-group" style="margin-top: 2rem;">
-            <h3
-                style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 600;"
-            >
-                카테고리 설정
-            </h3>
-            <div class="subtitle" style="margin-bottom: 12px;">
-                식단표에 표시될 카테고리와 식상(색상)을 설정합니다.
+    <!-- ── 오른쪽 컨텐츠 ── -->
+    <div class="settings-content">
+
+        <!-- API 연동 -->
+        {#if activeSection === "api"}
+            <div class="section-header">
+                <h2>API 연동</h2>
+                <p>AI 기능 사용을 위한 Gemini API 키를 설정합니다.</p>
             </div>
-            <div
-                class="category-list"
-                style="max-height: 400px; overflow-y: auto; padding-right: 8px;"
-            >
+
+            <div class="settings-card">
+                <div class="field-label">Gemini API 키</div>
+                <input
+                    type="password"
+                    bind:value={geminiKey}
+                    placeholder="AIzaSy..."
+                    class="field-input"
+                />
+                <div class="field-hint">
+                    런타임 키는 환경변수 <code>PUBLIC_GEMINI_API_KEY</code>보다 우선 적용됩니다.
+                    설정 저장 후 즉시 반영됩니다.
+                </div>
+            </div>
+
+        <!-- 카테고리 -->
+        {:else if activeSection === "categories"}
+            <div class="section-header">
+                <h2>카테고리</h2>
+                <p>메뉴에 붙는 카테고리와 색상을 관리합니다. 순서를 조정하면 필터 바에도 반영됩니다.</p>
+            </div>
+
+            <div class="settings-card cat-card">
                 {#each categories as cat, i (cat.id)}
                     <div class="category-row">
                         <input
                             type="color"
                             bind:value={cat.color}
                             class="color-picker"
+                            title="색상 선택"
                         />
+                        <div
+                            class="cat-color-swatch"
+                            style="background:{cat.color};"
+                        ></div>
                         <input
                             type="text"
                             bind:value={cat.name}
                             class="category-name-input"
                             placeholder="카테고리명"
                         />
-                        <div
-                            style="display: flex; gap: 4px; margin-left: auto;"
-                        >
+                        <div class="cat-actions">
                             <button
-                                class="btn-icon"
-                                style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem;"
+                                class="cat-order-btn"
                                 on:click={() => moveCategoryUp(i)}
                                 disabled={i === 0}
                                 aria-label="위로"
-                            >
-                                ▲
-                            </button>
+                            >▲</button>
                             <button
-                                class="btn-icon"
-                                style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem;"
+                                class="cat-order-btn"
                                 on:click={() => moveCategoryDown(i)}
                                 disabled={i === categories.length - 1}
                                 aria-label="아래로"
-                            >
-                                ▼
-                            </button>
+                            >▼</button>
                             <button
-                                class="btn-remove-category"
+                                class="cat-remove-btn"
                                 on:click={() => removeCategory(cat.id)}
-                                aria-label="삭제">×</button
-                            >
+                                aria-label="삭제"
+                            >×</button>
                         </div>
                     </div>
                 {/each}
-                <button class="btn-add-category" on:click={addCategory}
-                    >+ 카테고리 추가</button
-                >
-            </div>
-        </div>
-
-        <div class="form-group" style="margin-top: 2rem;">
-            <h3
-                style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 600;"
-            >
-                AI 프롬프트 설정
-            </h3>
-            <div class="subtitle" style="margin-bottom: 12px;">
-                AI 자동 생성 시 사용될 프롬프트를 버저닝하여 관리할 수 있습니다.
+                <button class="btn-add-category" on:click={addCategory}>
+                    + 카테고리 추가
+                </button>
             </div>
 
-            <div
-                class="prompt-list"
-                style="display: flex; flex-direction: column; gap: 20px;"
-            >
-                {#each prompts as prompt (prompt.id)}
-                    <div
-                        class="prompt-card"
-                        style="border: 1px solid var(--mac-border); border-radius: 8px; padding: 16px; background: #fafafa;"
-                    >
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"
-                        >
-                            <strong style="font-size: 0.9rem; color: #333;"
-                                >{prompt.description}</strong
-                            >
-                            <div
-                                style="display: flex; align-items: center; gap: 8px;"
-                            >
-                                <label style="font-size: 0.8rem; color: #666;"
-                                    >버전:</label
-                                >
-                                <input
-                                    type="text"
-                                    bind:value={prompt.version}
-                                    class="form-control"
-                                    style="width: 60px; padding: 4px; font-size: 0.8rem;"
-                                />
-                            </div>
-                        </div>
-                        <textarea
-                            bind:value={prompt.content}
-                            class="form-control"
-                            style="width: 100%; min-height: 120px; font-size: 0.85rem; font-family: monospace; resize: vertical;"
-                            placeholder="프롬프트 내용을 입력하세요..."
-                        ></textarea>
+        <!-- 일반 -->
+        {:else if activeSection === "general"}
+            <div class="section-header">
+                <h2>일반</h2>
+                <p>앱의 기본 동작 방식을 설정합니다.</p>
+            </div>
+
+            <div class="settings-card">
+                <label class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-title">삭제 확인 대화 상자</div>
+                        <div class="toggle-desc">메뉴 삭제 시 확인 창을 표시합니다.</div>
                     </div>
-                {/each}
+                    <input
+                        type="checkbox"
+                        bind:checked={confirmDelete}
+                        class="toggle-checkbox"
+                    />
+                </label>
             </div>
-        </div>
-
-        <div class="form-group" style="margin-top: 2rem;">
-            <h3
-                style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 600;"
-            >
-                일반 설정
-            </h3>
-            <label
-                class="toggle-label"
-                for="confirm-delete"
-                style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;"
-            >
-                <input
-                    type="checkbox"
-                    id="confirm-delete"
-                    bind:checked={confirmDelete}
-                    style="width: 16px; height: 16px; cursor: pointer;"
-                />
-                메뉴 삭제 시 확인 대화 상자 표시
-            </label>
-        </div>
-
-        <div
-            style="margin-top: 1.5rem; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
-        >
-            <button on:click={saveSettings} class="btn-mac">설정 저장</button>
-            {#if saveMsgVisible}
-                <span
-                    style="margin-left:12px; font-size:0.85rem; color:#27c93f;"
-                    >저장되었습니다!</span
-                >
-            {/if}
-        </div>
+        {/if}
     </div>
-    <div class="version-footer">Meal Chart App - SvelteKit Edition</div>
 </div>
+
+<style>
+    .settings-layout {
+        display: flex;
+        height: 100%;
+        overflow: hidden;
+        background: #f5f5f7;
+    }
+
+    /* ── 사이드바 ── */
+    .settings-nav {
+        width: 180px;
+        flex-shrink: 0;
+        background: #ebebeb;
+        border-right: 1px solid #c8c8c8;
+        display: flex;
+        flex-direction: column;
+        padding: 1.2rem 0.75rem;
+        gap: 2px;
+    }
+
+    .nav-title {
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 0 8px;
+        margin-bottom: 10px;
+    }
+
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        font-size: 0.88rem;
+        color: #444;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.15s;
+        font-family: inherit;
+    }
+
+    .nav-item:hover {
+        background: #dcdcdc;
+    }
+
+    .nav-item.active {
+        background: #007aff;
+        color: white;
+        font-weight: 500;
+    }
+
+    .nav-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .nav-footer {
+        margin-top: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding-top: 16px;
+    }
+
+    .btn-save {
+        width: 100%;
+        padding: 8px;
+        background: #007aff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s;
+    }
+
+    .btn-save:hover {
+        background: #006ae6;
+    }
+
+    .save-toast {
+        text-align: center;
+        font-size: 0.78rem;
+        color: #27c93f;
+        font-weight: 500;
+    }
+
+    /* ── 컨텐츠 영역 ── */
+    .settings-content {
+        flex: 1;
+        padding: 2rem 2.5rem;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .section-header {
+        margin-bottom: 4px;
+    }
+
+    .section-header h2 {
+        margin: 0 0 4px;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1c1c1e;
+    }
+
+    .section-header p {
+        margin: 0;
+        font-size: 0.83rem;
+        color: #888;
+    }
+
+    /* ── 공통 카드 ── */
+    .settings-card {
+        background: white;
+        border: 1px solid #d8d8d8;
+        border-radius: 12px;
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .field-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .field-input {
+        padding: 9px 13px;
+        border: 1px solid #c8c8c8;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        font-family: inherit;
+    }
+
+    .field-input:focus {
+        border-color: #007aff;
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.18);
+    }
+
+    .field-hint {
+        font-size: 0.78rem;
+        color: #999;
+        line-height: 1.5;
+    }
+
+    .field-hint code {
+        background: #f1f3f5;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        color: #555;
+    }
+
+    /* ── 카테고리 ── */
+    .cat-card {
+        padding: 12px;
+        gap: 6px;
+    }
+
+    .category-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #f8f9fa;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #eeeeee;
+    }
+
+    .cat-color-swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        border: 1px solid rgba(0,0,0,0.1);
+        margin-left: -6px;
+    }
+
+    .cat-actions {
+        display: flex;
+        gap: 3px;
+        margin-left: auto;
+    }
+
+    .cat-order-btn {
+        width: 26px;
+        height: 26px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 5px;
+        font-size: 0.65rem;
+        cursor: pointer;
+        color: #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        transition: background 0.15s;
+    }
+
+    .cat-order-btn:hover:not(:disabled) {
+        background: #f0f0f0;
+    }
+
+    .cat-order-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    .cat-remove-btn {
+        width: 26px;
+        height: 26px;
+        border: none;
+        background: none;
+        border-radius: 5px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        color: #bbb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        transition: color 0.15s;
+    }
+
+    .cat-remove-btn:hover {
+        color: #fa5252;
+    }
+
+    /* ── 프롬프트 아코디언 ── */
+    .prompt-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .prompt-accordion {
+        background: white;
+        border: 1px solid #d8d8d8;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+    }
+
+    .prompt-accordion.open {
+        box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+
+    .prompt-accordion-header {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-family: inherit;
+        text-align: left;
+        gap: 10px;
+    }
+
+    .prompt-accordion-header:hover {
+        background: #fafafa;
+    }
+
+    .prompt-title-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .prompt-name {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .prompt-id-badge {
+        font-size: 0.72rem;
+        background: #f1f3f5;
+        color: #666;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-family: monospace;
+    }
+
+    .system-badge {
+        font-size: 0.7rem;
+        background: #fff3cd;
+        color: #856404;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-weight: 500;
+    }
+
+    .accordion-chevron {
+        font-size: 0.65rem;
+        color: #aaa;
+        flex-shrink: 0;
+    }
+
+    .prompt-accordion-body {
+        padding: 0 18px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border-top: 1px solid #f0f0f0;
+        padding-top: 14px;
+    }
+
+    .prompt-desc {
+        font-size: 0.78rem;
+        color: #888;
+    }
+
+    .system-notice {
+        font-size: 0.78rem;
+        color: #856404;
+        background: #fff8e1;
+        border: 1px solid #ffe082;
+        border-radius: 7px;
+        padding: 8px 12px;
+        line-height: 1.5;
+    }
+
+    .prompt-meta-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .meta-label {
+        font-size: 0.78rem;
+        color: #888;
+        font-weight: 500;
+    }
+
+    .version-input {
+        width: 64px;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        outline: none;
+        font-family: monospace;
+    }
+
+    .version-input:focus {
+        border-color: #007aff;
+    }
+
+    .prompt-textarea {
+        width: 100%;
+        min-height: 160px;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-family: "SF Mono", "Menlo", monospace;
+        resize: vertical;
+        outline: none;
+        line-height: 1.55;
+        box-sizing: border-box;
+        color: #333;
+    }
+
+    .prompt-textarea:focus {
+        border-color: #007aff;
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+    }
+
+    /* ── 일반 ── */
+    .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        cursor: pointer;
+    }
+
+    .toggle-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .toggle-title {
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: #333;
+    }
+
+    .toggle-desc {
+        font-size: 0.78rem;
+        color: #999;
+    }
+
+    .toggle-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        flex-shrink: 0;
+        accent-color: #007aff;
+    }
+</style>
