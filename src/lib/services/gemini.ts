@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { Prompt } from "$lib/db";
+import type { Prompt } from "$lib/services/db";
 
 export async function convertMealText(text: string, apiKey: string, availableMenus?: string[], prompts?: Prompt[]) {
     if (!apiKey) {
@@ -37,8 +37,8 @@ export async function convertMealText(text: string, apiKey: string, availableMen
             console.error("JSON 파싱 에러:", e, "Raw text:", jsonText);
             throw new Error("AI 응답을 JSON으로 변환하는 데 실패했습니다.");
         }
-    } catch (error: any) {
-        if (error.message && error.message.includes("429")) {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message.includes("429")) {
             throw new Error("Gemini API 무료 요청 할당량을 초과했습니다. 잠시 후(약 1분) 다시 시도해주세요.");
         }
         throw error;
@@ -67,8 +67,8 @@ export async function askGemini(prompt: string, apiKey: string, availableMenus?:
         const result = await model.generateContent(prompt);
         const response = await result.response;
         return response.text().trim();
-    } catch (error: any) {
-        if (error.message && error.message.includes("429")) {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message.includes("429")) {
             throw new Error("Gemini API 무료 요청 할당량을 초과했습니다. 잠시 후(약 1분) 다시 시도해주세요.");
         }
         throw error;

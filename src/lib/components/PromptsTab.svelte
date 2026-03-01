@@ -6,7 +6,7 @@
         createPrompt,
         deletePrompt,
         type Prompt,
-    } from "$lib/db";
+    } from "$lib/services/db";
 
     const SYSTEM_PROMPT_IDS = new Set(["json_parser", "chat_base", "auto_gen"]);
 

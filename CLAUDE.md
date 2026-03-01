@@ -41,34 +41,65 @@ When committing a meaningful batch of changes:
 - `Fixed` — bug fixes
 - `Removed` — removed features
 
+---
+
 ## AI Collaboration Workflow
 
-Gemini MCP is connected. Use it at the right moments — not for everything, but for the cases below.
+이 프로젝트는 **Claude Code**와 **Gemini MCP**를 함께 사용한다.  
+각자의 강점이 다르므로, 작업 성격에 따라 아래 기준으로 역할을 나눈다.
 
-### 📋 Plan First (before implementing)
+---
 
-When adding a new feature, new tab, or changing architecture, ask Gemini to plan before writing code:
+### 역할 분담 기준
+
+| 작업 유형 | 담당 | 이유 |
+|---|---|---|
+| 코드 작성 / 수정 / 리팩토링 | **Claude Code** | 파일 편집, 실행, 검증까지 직접 처리 |
+| 단계별 구현 계획 수립 | **Claude Code** | 작은 단위 기능은 직접 계획하고 실행 |
+| 대규모 아키텍처 설계 | **Gemini** | 전체 구조를 넓은 컨텍스트로 한 번에 파악 |
+| `main.cjs` 전체 분석 | **Gemini** | 단일 파일이지만 크기가 커서 전체 로딩 유리 |
+| Electron IPC / 프로세스 간 버그 | **Gemini** | main ↔ renderer 흐름을 한번에 추적 |
+| Svelte 컴포넌트 간 상태 버그 | **Gemini** | 여러 파일의 반응성 흐름을 동시에 분석 |
+| SQLite 스키마 ↔ 클라이언트 불일치 | **Gemini** | `main.cjs` + `db.ts` 동시 비교 |
+| 2회 이상 반복되는 디버깅 | **Gemini** | 동일 오류 반복 시 Claude가 아닌 Gemini에 위임 |
+| 코드 리뷰 / 엣지케이스 점검 | **Gemini** | 변경 파일 전체를 한 번에 넘겨서 검토 |
+| Gemini 프롬프트 튜닝 | **Gemini** | `prompts` 테이블 + `gemini.ts`를 같이 분석 |
+
+---
+
+### Claude Code가 직접 처리하는 것
+
+- 파일 생성 / 수정 / 삭제
+- npm 스크립트 실행 및 빌드 확인
+- 명확한 요구사항의 기능 구현 (Svelte 컴포넌트, API 엔드포인트, DB 쿼리 등)
+- 에러 로그 해석 및 1~2회 이내의 단순 디버깅
+- CHANGELOG / package.json 버전 관리
+
+---
+
+### Gemini에 넘기는 시점과 방법
+
+#### 📋 Plan First — 새 기능 구현 전
+
+새 탭, 새 기능, 아키텍처 변경 전에 계획을 먼저 받는다.  
+계획 확인 후 사용자 승인 받고 구현 시작.
 
 ```
 use gemini to analyze @src/ @main.cjs and create an implementation plan for: [기능 설명]
 ```
 
-Wait for the plan. Confirm with the user before proceeding.
+#### 🐛 Debug — 동일 오류 2회 이상 반복 시
 
-### 🐛 Debug with Gemini (after 2+ failed attempts)
-
-If the same error repeats more than twice, delegate to Gemini instead of guessing:
+같은 에러가 두 번 이상 반복되면 즉시 Gemini에 위임. 추측으로 계속 시도하지 않는다.
 
 ```
 use gemini to debug this error in @[관련파일]:
 [에러메시지 전체]
 ```
 
-Apply Gemini's suggestion, then verify.
+#### 👀 Review — 작업 완료 전 최종 점검
 
-### 👀 Review before finishing
-
-Before marking a task done, ask Gemini to review the changed files:
+태스크를 완료로 표시하기 전에 변경된 파일을 Gemini로 리뷰한다.
 
 ```
 use gemini to review @[변경된파일들] — check for bugs, edge cases, and Electron/SvelteKit-specific issues
@@ -76,12 +107,21 @@ use gemini to review @[변경된파일들] — check for bugs, edge cases, and E
 
 ---
 
-### Project-specific Gemini tips
+### Project-specific Gemini 프롬프트 패턴
 
-- **Electron IPC / main process 이슈** → Gemini의 넓은 컨텍스트 윈도우로 `main.cjs` 전체를 한번에 분석 가능
-- **Svelte 반응성 버그** → `@src/routes/ @src/lib/` 같이 넘기면 컴포넌트 간 상태 흐름 추적에 유리
-- **SQLite 스키마 변경** → `main.cjs`의 스키마 정의와 `db.ts` 클라이언트를 같이 넘겨서 불일치 확인
-- **Gemini 프롬프트 튜닝** → `prompts` 테이블 내용과 `gemini.ts`를 같이 넘기면 프롬프트 개선 제안 받을 수 있음
+```
+# Electron IPC 이슈
+use gemini to analyze @main.cjs — focus on IPC handlers and renderer communication
+
+# Svelte 반응성 버그
+use gemini to trace state flow in @src/routes/ @src/lib/ — find reactivity issues
+
+# SQLite 스키마 불일치
+use gemini to compare schema in @main.cjs with client usage in @src/lib/db.ts
+
+# Gemini 프롬프트 개선
+use gemini to suggest improvements for prompts in @src/lib/gemini.ts — reference prompts table structure
+```
 
 ---
 
@@ -155,4 +195,4 @@ The API key can also be set at runtime via the Settings tab and is persisted in 
 
 ### Build Notes
 
-The `npm run build` script patches `build/index.html` after the SvelteKit build to convert absolute `/_app` paths to relative `./_app` paths, which is required for Electron's file loading to work correctly.  
+The `npm run build` script patches `build/index.html` after the SvelteKit build to convert absolute `/_app` paths to relative `./_app` paths, which is required for Electron's file loading to work correctly.

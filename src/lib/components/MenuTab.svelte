@@ -1,26 +1,15 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { hangulIncludes } from "$lib/hangul";
+    import { hangulIncludes } from "$lib/utils/hangul";
     import {
         fetchCategories,
         fetchMenuItems,
         createMenuItem,
         updateMenuItem,
         deleteMenuItem,
-    } from "$lib/db";
-
-    interface Category {
-        id: number;
-        name: string;
-        color: string;
-    }
-
-    interface MenuItem {
-        id: number;
-        name: string;
-        category_id: number | null;
-        ingredients: string[];
-    }
+        type Category,
+        type MenuItem,
+    } from "$lib/services/db";
 
     let menuItems: MenuItem[] = [];
     let categories: Category[] = [];

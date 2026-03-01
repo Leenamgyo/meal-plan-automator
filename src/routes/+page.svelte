@@ -7,13 +7,12 @@
     import CalendarTab from "$lib/components/CalendarTab.svelte";
     import StatsTab from "$lib/components/StatsTab.svelte";
     import PromptsTab from "$lib/components/PromptsTab.svelte";
+    import { geminiKey } from "$lib/stores";
 
     let activeTab = "calendar";
 
-    let geminiKey = "";
-
     onMount(() => {
-        geminiKey = localStorage.getItem("geminiKey") || "";
+        geminiKey.set(localStorage.getItem("geminiKey") || "");
     });
 </script>
 
@@ -126,12 +125,12 @@
     {#if activeTab === "menu"}
         <MenuTab />
     {:else if activeTab === "calendar"}
-        <CalendarTab {geminiKey} />
+        <CalendarTab />
     {:else if activeTab === "stats"}
         <StatsTab />
     {:else if activeTab === "prompts"}
         <PromptsTab />
     {:else if activeTab === "settings"}
-        <SettingsTab bind:geminiKey />
+        <SettingsTab />
     {/if}
 </main>

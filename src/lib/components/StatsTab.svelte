@@ -6,7 +6,7 @@
         fetchMealData,
         type Category,
         type MenuItem,
-    } from "$lib/db";
+    } from "$lib/services/db";
 
     let categories: Category[] = [];
     let menuItems: MenuItem[] = [];

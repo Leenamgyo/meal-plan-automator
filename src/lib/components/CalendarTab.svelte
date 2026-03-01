@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { askGemini } from "$lib/gemini";
+    import { askGemini } from "$lib/services/gemini";
     import { PUBLIC_GEMINI_API_KEY } from "$env/static/public";
     import {
         fetchCategories,
@@ -8,26 +8,26 @@
         fetchMealData,
         saveMealForDate,
         fetchPrompts,
+        type Category,
+        type MenuItem,
         type Prompt,
-    } from "$lib/db";
-
-    export let geminiKey: string = "";
-
-    interface CalendarDay {
-        day: number;
-        isOtherMonth: boolean;
-    }
-    interface Category {
-        id: number;
-        name: string;
-        color: string;
-    }
-    interface MenuItem {
-        id: number;
-        name: string;
-        category_id: number | null;
-        ingredients?: string[];
-    }
+    } from "$lib/services/db";
+    import {
+        buildCalendarDays,
+        dateKey as _dateKey,
+        isToday as _isToday,
+        type CalendarDay,
+    } from "$lib/utils/calendarUtils";
+    import {
+        getWindowDates,
+        buildAvailableMenusText,
+        buildRecentMealsText,
+        calculateMenuScores,
+        formatScoreTable,
+        parseAIMenuResponse,
+    } from "$lib/services/mealGeneration";
+    import { geminiKey } from "$lib/stores";
+    import type { Message } from "$lib/types/index";
 
     let currentDate = new Date();
     let mealData: Record<string, string[]> = {};
@@ -46,10 +46,6 @@
     let sortOrder: "name" | "category" = "name";
 
     // AI Chat State
-    interface Message {
-        role: "user" | "ai";
-        text: string;
-    }
     let chatInput = "";
     let chatMessages: Message[] = [];
     let isConverting = false;
@@ -60,7 +56,7 @@
         const userMsg = chatInput.trim();
         chatInput = "";
         chatMessages = [...chatMessages, { role: "user", text: userMsg }];
-        const apiKey = PUBLIC_GEMINI_API_KEY || geminiKey;
+        const apiKey = PUBLIC_GEMINI_API_KEY || $geminiKey;
         if (!apiKey) {
             chatMessages = [
                 ...chatMessages,
@@ -147,21 +143,7 @@
         year: "numeric",
         month: "long",
     });
-    $: daysInMonth = new Date(year, month + 1, 0).getDate();
-    $: firstDayOfWeek = new Date(year, month, 1).getDay();
-    $: prevMonthDays = new Date(year, month, 0).getDate();
-
-    $: calendarDays = (() => {
-        const days: CalendarDay[] = [];
-        for (let i = firstDayOfWeek - 1; i >= 0; i--)
-            days.push({ day: prevMonthDays - i, isOtherMonth: true });
-        for (let d = 1; d <= daysInMonth; d++)
-            days.push({ day: d, isOtherMonth: false });
-        let nextDay = 1;
-        while (days.length % 7 !== 0)
-            days.push({ day: nextDay++, isOtherMonth: true });
-        return days;
-    })();
+    $: calendarDays = buildCalendarDays(year, month);
 
     $: totalRows = Math.ceil(calendarDays.length / 7);
     const weekDays = ["일", "월", "화", "수", "목", "금", "토"];
@@ -227,7 +209,7 @@
         // 비동기 처리 중 selectedDate가 바뀌어도 처음 클릭한 날짜에 저장
         const targetDate = selectedDate;
 
-        const apiKey = PUBLIC_GEMINI_API_KEY || geminiKey;
+        const apiKey = PUBLIC_GEMINI_API_KEY || $geminiKey;
         if (!apiKey) {
             alert("환경설정에서 Gemini API 키를 먼저 입력해주세요.");
             return;
@@ -242,122 +224,11 @@
 
         isConverting = true;
         try {
-            // ── 점수 가중치 (추후 Settings에서 조정 가능하도록 한 곳에 모음) ──
-            const SCORE_BASE = 100;
-            const FREQ_PENALTY = 10;      // 등장 1회당 차감
-            const RECENCY_THRESHOLD = 7;  // 이 일수 이내면 근접 패널티 적용
-            const RECENCY_PENALTY = 20;   // 근접 패널티
-
-            // ── ±30일 날짜 창 ──
-            const selectedDateObj = new Date(targetDate);
-            const windowStart = new Date(selectedDateObj);
-            windowStart.setDate(windowStart.getDate() - 30);
-            const windowEnd = new Date(selectedDateObj);
-            windowEnd.setDate(windowEnd.getDate() + 30);
-
-            const windowDates = Object.keys(mealData).filter((d) => {
-                if (!mealData[d].length || d === targetDate) return false;
-                const dObj = new Date(d);
-                return dObj >= windowStart && dObj <= windowEnd;
-            });
-
-            // ── 카테고리 매핑 ──
-            const categoryMap = new Map<number, string>();
-            categories.forEach((c) => categoryMap.set(c.id, c.name));
-
-            // ── 가용 메뉴 목록 (카테고리별) ──
-            const groupedMenus: Record<string, string[]> = {};
-            menuItems.forEach((m) => {
-                const catName = m.category_id
-                    ? categoryMap.get(m.category_id) || "미분류"
-                    : "미분류";
-                if (!groupedMenus[catName]) groupedMenus[catName] = [];
-                groupedMenus[catName].push(m.name);
-            });
-            let availableMenusText = "";
-            for (const [cat, menus] of Object.entries(groupedMenus)) {
-                availableMenusText += `[${cat}]: ${menus.join(", ")}\n`;
-            }
-
-            // ── 직전 7일 이력 (맥락용) ──
-            const past7Days = windowDates
-                .filter((d) => new Date(d) < selectedDateObj)
-                .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-                .slice(0, 7);
-            let recentMealsText = "";
-            if (past7Days.length > 0) {
-                for (const d of past7Days) {
-                    recentMealsText += `[${d}]: ${mealData[d].join(", ")}\n`;
-                }
-            } else {
-                recentMealsText = "(최근 식단 이력 없음)";
-            }
-
-            // ── 메뉴별 점수 계산 ──
-            interface MenuScore {
-                name: string;
-                score: number;
-                freq: number;
-                closestDays: number | null;
-            }
-            const categoryScores: Record<string, MenuScore[]> = {};
-
-            for (const m of menuItems) {
-                const catName = m.category_id
-                    ? categoryMap.get(m.category_id) || "미분류"
-                    : "미분류";
-
-                let freq = 0;
-                let closestDays: number | null = null;
-
-                for (const d of windowDates) {
-                    if (mealData[d].includes(m.name)) {
-                        freq++;
-                        const absDays = Math.round(
-                            Math.abs(
-                                new Date(d).getTime() -
-                                    selectedDateObj.getTime(),
-                            ) /
-                                (1000 * 60 * 60 * 24),
-                        );
-                        if (closestDays === null || absDays < closestDays) {
-                            closestDays = absDays;
-                        }
-                    }
-                }
-
-                let score = SCORE_BASE - freq * FREQ_PENALTY;
-                if (closestDays !== null && closestDays <= RECENCY_THRESHOLD) {
-                    score -= RECENCY_PENALTY;
-                }
-                score = Math.max(0, score);
-
-                if (!categoryScores[catName]) categoryScores[catName] = [];
-                categoryScores[catName].push({
-                    name: m.name,
-                    score,
-                    freq,
-                    closestDays,
-                });
-            }
-
-            // 카테고리 내 점수 내림차순 정렬
-            for (const cat of Object.keys(categoryScores)) {
-                categoryScores[cat].sort((a, b) => b.score - a.score);
-            }
-
-            // ── 점수표 문자열 생성 ──
-            let frequencyData = `[계산 기준: 기본 ${SCORE_BASE}점 / 등장 -${FREQ_PENALTY}점/회 / ${RECENCY_THRESHOLD}일 이내 추가 -${RECENCY_PENALTY}점]\n\n`;
-            for (const [cat, scores] of Object.entries(categoryScores)) {
-                frequencyData += `[${cat}]\n`;
-                for (const s of scores) {
-                    const lastStr =
-                        s.closestDays !== null
-                            ? `±${s.closestDays}일 이내 ${s.freq}회`
-                            : "미사용";
-                    frequencyData += `  ${s.name}: ${s.score}점 (${lastStr})\n`;
-                }
-            }
+            const windowDates = getWindowDates(mealData, targetDate);
+            const availableMenusText = buildAvailableMenusText(menuItems, categories);
+            const recentMealsText = buildRecentMealsText(mealData, targetDate, windowDates);
+            const categoryScores = calculateMenuScores(menuItems, categories, mealData, targetDate, windowDates);
+            const frequencyData = formatScoreTable(categoryScores);
 
             const allMenuNames = menuItems.map((m) => m.name);
             const promptContextStr = autoGenPrompt
@@ -372,23 +243,10 @@
                 prompts,
             );
 
-            // 응답 파싱: 쉼표, 줄바꿈, 번호/불릿 처리
-            const rawMenus = aiResponse.split(/,|\n|- |\* |\d+\.\s*/);
-            const generatedMenus = rawMenus
-                .map((m) => m.trim())
-                .filter((m) => m.length > 0);
-
-            let updatedMeals: string[] = [];
-            for (const menu of generatedMenus) {
-                const matched = allMenuNames.find((n) => n.trim() === menu);
-                if (matched && !updatedMeals.includes(matched)) {
-                    updatedMeals.push(matched);
-                }
-            }
+            const updatedMeals = parseAIMenuResponse(aiResponse, allMenuNames);
 
             if (updatedMeals.length > 0) {
                 mealData = { ...mealData, [targetDate]: updatedMeals };
-                // localStorage는 전체 갱신, DB는 targetDate로 명시 저장
                 localStorage.setItem("mealData", JSON.stringify(mealData));
                 saveMealForDate(targetDate, updatedMeals);
             } else {
@@ -396,9 +254,9 @@
                     "AI가 추천한 메뉴가 메뉴 목록에 없거나 파싱에 실패했습니다.\n다시 시도해보세요.",
                 );
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
-            alert(`오류 발생: ${error.message}`);
+            alert(`오류 발생: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             isConverting = false;
         }
@@ -479,7 +337,7 @@
     }
 
     function dateKey(day: number): string {
-        return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        return _dateKey(year, month, day);
     }
 
     function getMenus(
@@ -506,12 +364,7 @@
 
     function isToday(cd: CalendarDay): boolean {
         if (cd.isOtherMonth) return false;
-        const today = new Date();
-        return (
-            today.getFullYear() === year &&
-            today.getMonth() === month &&
-            today.getDate() === cd.day
-        );
+        return _isToday(year, month, cd.day);
     }
 
     function isWeekend(idx: number): boolean {

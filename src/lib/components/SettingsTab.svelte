@@ -1,27 +1,20 @@
 <script lang="ts">
     import { onMount } from "svelte";
-
-    export let geminiKey: string;
-
-    let saveMsgVisible = false;
-    let confirmDelete = true;
-    let activeSection: "api" | "categories" | "general" = "api";
-
-    interface Category {
-        id: number;
-        name: string;
-        color: string;
-        sort_order?: number;
-    }
-
-    let categories: Category[] = [];
-
+    import { geminiKey } from "$lib/stores";
     import {
         createCategory,
         deleteCategory,
         updateCategory,
         fetchCategories,
-    } from "$lib/db";
+        type Category,
+    } from "$lib/services/db";
+    import { moveItemUp, moveItemDown } from "$lib/utils/arrayUtils";
+
+    let saveMsgVisible = false;
+    let confirmDelete = true;
+    let activeSection: "api" | "categories" | "general" = "api";
+
+    let categories: Category[] = [];
 
     onMount(async () => {
         const cd = localStorage.getItem("confirmDelete");
@@ -46,25 +39,15 @@
     }
 
     function moveCategoryUp(index: number) {
-        if (index > 0) {
-            const temp = categories[index];
-            categories[index] = categories[index - 1];
-            categories[index - 1] = temp;
-            categories = [...categories];
-        }
+        categories = moveItemUp(categories, index);
     }
 
     function moveCategoryDown(index: number) {
-        if (index < categories.length - 1) {
-            const temp = categories[index];
-            categories[index] = categories[index + 1];
-            categories[index + 1] = temp;
-            categories = [...categories];
-        }
+        categories = moveItemDown(categories, index);
     }
 
     async function saveSettings() {
-        localStorage.setItem("geminiKey", geminiKey);
+        localStorage.setItem("geminiKey", $geminiKey);
         localStorage.setItem("confirmDelete", String(confirmDelete));
 
         for (let i = 0; i < categories.length; i++) {
@@ -129,7 +112,7 @@
                 <div class="field-label">Gemini API 키</div>
                 <input
                     type="password"
-                    bind:value={geminiKey}
+                    bind:value={$geminiKey}
                     placeholder="AIzaSy..."
                     class="field-input"
                 />
