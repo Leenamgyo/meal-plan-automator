@@ -66,6 +66,9 @@ When committing a meaningful batch of changes:
 | `/review` | 작업 완료 **직전** 최종 점검 | 없음 |
 | `/debug [에러]` | 동일 오류 **2회 이상** 반복 시 | 에러 메시지 (필수) |
 | `/release [patch\|minor\|major]` | 의미 있는 변경 묶음 **완료 후** | 타입 생략 시 자동 판단 |
+| `/feat [기능명]` | 새 기능 작업 **시작 시** — 이슈 생성 + feature 브랜치 생성 + TODO.md 추가 | 기능명 (필수) |
+| `/pr` | feature 브랜치 작업 **완료 후** — build → commit → push → PR 생성 (`Closes #N` 자동 포함) | PR 추가 설명 (선택) |
+| `/done [이슈번호]` | PR 병합 후 — 이슈 닫기 + TODO.md 완료 처리 | 이슈 번호 (필수) |
 
 스킬 파일 위치: `.claude/commands/`
 
@@ -181,7 +184,7 @@ meal-chart.db (SQLite, in project root)
 src/lib/
 ├── types/
 │   ├── index.ts          # 모든 타입 re-export 진입점
-│   ├── models.ts         # DB 스키마 모델 (Category, MenuItem, MealRecord, Prompt)
+│   ├── models.ts         # DB 스키마 모델 (Category, MenuItem, MealRecord, MealEntry, Prompt)
 │   └── ui.ts             # UI 전용 타입 (Message, CalendarDay)
 ├── services/
 │   ├── db.ts             # 순수 HTTP 클라이언트 (apiGet, apiPost, apiPut, apiDelete)
@@ -219,7 +222,7 @@ src/lib/
 |---|---|---|
 | `categories` | `id`, `name`, `color`, `sort_order` | Menu categories |
 | `menu_items` | `id`, `name`, `category_id`, `ingredients` (JSON array) | FK → categories (SET NULL on delete) |
-| `meal_data` | `date` (UNIQUE), `menus` (JSON array of menu names) | Upsert on conflict |
+| `meal_data` | `date` (UNIQUE), `menus` (JSON array of MealEntry objects) | Upsert on conflict. MealEntry = `{ name, category_id, color }`. Old string[] data is normalized on fetch. |
 | `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | Gemini prompt templates, seeded at startup |
 
 ### Tab Components
