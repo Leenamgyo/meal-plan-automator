@@ -22,6 +22,7 @@
         parseAIMenuResponse,
     } from "$lib/services/mealGeneration";
     import { geminiKey } from "$lib/stores";
+    import html2canvas from "html2canvas";
 
     let currentDate = new Date();
     let mealData: Record<string, string[]> = {};
@@ -373,12 +374,57 @@
     function goToToday() {
         currentDate = new Date();
     }
+
+    let calendarEl: HTMLElement;
+    let isDownloading = false;
+
+    async function downloadCalendarPng() {
+        if (!calendarEl || isDownloading) return;
+        isDownloading = true;
+        try {
+            const canvas = await html2canvas(calendarEl, {
+                backgroundColor: "#ffffff",
+                scale: 2,
+                useCORS: true,
+            });
+            const link = document.createElement("a");
+            link.download = `식단표_${year}년_${month + 1}월.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        } catch (e) {
+            console.error("PNG 다운로드 실패:", e);
+        } finally {
+            isDownloading = false;
+        }
+    }
+
+    async function downloadDateMenuPng() {
+        if (!selectedDate || isDownloading) return;
+        isDownloading = true;
+        try {
+            const target = document.querySelector(".panel-meals-section") as HTMLElement;
+            if (!target) return;
+            const canvas = await html2canvas(target, {
+                backgroundColor: "#ffffff",
+                scale: 2,
+                useCORS: true,
+            });
+            const link = document.createElement("a");
+            link.download = `식단_${selectedDate}.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        } catch (e) {
+            console.error("PNG 다운로드 실패:", e);
+        } finally {
+            isDownloading = false;
+        }
+    }
 </script>
 
 <div class="calendar-layout">
     <!-- Left: Calendar -->
     <div class="calendar-main">
-        <div class="meal-schedule">
+        <div class="meal-schedule" bind:this={calendarEl}>
 
             <!-- ── 통합 헤더 바 ── -->
             <div class="sch-header-bar">
@@ -387,6 +433,12 @@
                     <h2 class="sch-title">{monthName}</h2>
                     <button class="sch-nav-btn" on:click={nextMonth} aria-label="다음 달">›</button>
                     <button class="btn-today" on:click={goToToday}>오늘</button>
+                    <button
+                        class="btn-download-cal"
+                        on:click={downloadCalendarPng}
+                        disabled={isDownloading}
+                        title="달력 PNG 다운로드"
+                    >↓ PNG</button>
                 </div>
 
                 <div class="sch-filter-group">
@@ -501,6 +553,14 @@
                             ✨ AI 자동 추천
                         {/if}
                     </button>
+                    {#if selectedDateMeals.length > 0}
+                        <button
+                            class="btn-download-date"
+                            on:click={downloadDateMenuPng}
+                            disabled={isDownloading}
+                            title="식단 PNG 다운로드"
+                        >↓ PNG</button>
+                    {/if}
                 </div>
                 <button class="btn-close" on:click={closePanel}>×</button>
             </div>

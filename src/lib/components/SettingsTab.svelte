@@ -8,6 +8,7 @@
         fetchCategories,
     } from "$lib/services/categories";
     import type { Category } from "$lib/types/models";
+    import { aiIngredientsEnabled } from "$lib/stores";
     import { moveItemUp, moveItemDown } from "$lib/utils/arrayUtils";
 
     let saveMsgVisible = false;
@@ -48,6 +49,7 @@
 
     async function saveSettings() {
         localStorage.setItem("geminiKey", $geminiKey);
+        localStorage.setItem("aiIngredientsEnabled", String($aiIngredientsEnabled));
         localStorage.setItem("confirmDelete", String(confirmDelete));
 
         for (let i = 0; i < categories.length; i++) {
@@ -190,6 +192,17 @@
                     <input
                         type="checkbox"
                         bind:checked={confirmDelete}
+                        class="toggle-checkbox"
+                    />
+                </label>
+                <label class="toggle-row">
+                    <div class="toggle-info">
+                        <div class="toggle-title">AI 재료 자동 추천</div>
+                        <div class="toggle-desc">메뉴 등록 시 AI가 재료를 자동으로 추천합니다. Gemini API 키가 필요합니다.</div>
+                    </div>
+                    <input
+                        type="checkbox"
+                        bind:checked={$aiIngredientsEnabled}
                         class="toggle-checkbox"
                     />
                 </label>

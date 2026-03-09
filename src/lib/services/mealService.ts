@@ -45,6 +45,26 @@ export async function convertMealText(
 }
 
 /**
+ * 메뉴 이름으로 재료 추천 (ingredient_suggest 프롬프트 사용)
+ */
+export async function suggestIngredients(
+    menuName: string,
+    apiKey: string,
+    prompts?: Prompt[],
+): Promise<string[]> {
+    const base =
+        prompts?.find((p) => p.id === "ingredient_suggest")?.content ??
+        "당신은 요리 전문가입니다. 메뉴 이름을 받으면 해당 요리의 주요 재료를 한국어로 나열합니다. 재료 이름만 쉼표로 구분하여 한 줄로 응답하세요. 다른 설명은 하지 마세요.";
+
+    const raw = await callGeminiText(`재료 추천: ${menuName}`, base, apiKey);
+
+    return raw
+        .split(/[,，\n]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && s.length < 20);
+}
+
+/**
  * 일반 식단 채팅 (chat_base 프롬프트 사용)
  */
 export async function askGemini(

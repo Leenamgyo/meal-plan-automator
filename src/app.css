@@ -918,6 +918,29 @@ textarea.mac-textarea:focus {
     cursor: not-allowed;
 }
 
+.btn-ai-ingredient {
+    width: 100%;
+    padding: 7px 12px;
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: opacity 0.15s;
+}
+
+.btn-ai-ingredient:hover:not(:disabled) {
+    opacity: 0.88;
+}
+
+.btn-ai-ingredient:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* Edit Mode */
 .btn-edit-menu {
     background: none;
@@ -1117,6 +1140,34 @@ textarea.mac-textarea:focus {
 }
 
 .btn-today:hover { background: #f0f4ff; color: var(--mac-accent); }
+
+.btn-download-cal {
+    background: white;
+    border: 1px solid var(--mac-border);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: #555;
+}
+.btn-download-cal:hover:not(:disabled) { background: #f0f4ff; color: var(--mac-accent); }
+.btn-download-cal:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-download-date {
+    padding: 4px 10px;
+    border: 1px solid #d0c4f7;
+    border-radius: 7px;
+    background: #f5f0ff;
+    color: #6d28d9;
+    font-size: 0.75rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.btn-download-date:hover:not(:disabled) { background: #ede9fe; }
+.btn-download-date:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* 필터 그룹 */
 .sch-filter-group {

@@ -9,6 +9,9 @@
         deleteMenuItem,
     } from "$lib/services/menuItems";
     import type { Category, MenuItem } from "$lib/types/models";
+    import { suggestIngredients } from "$lib/services/mealService";
+    import { geminiKey, aiIngredientsEnabled } from "$lib/stores";
+    import { PUBLIC_GEMINI_API_KEY } from "$env/static/public";
 
     let menuItems: MenuItem[] = [];
     let categories: Category[] = [];
@@ -271,6 +274,26 @@
         if (e.key === "Enter") {
             e.preventDefault();
             addNewMenu();
+        }
+    }
+
+    let isAiLoading = false;
+
+    async function handleAiSuggest() {
+        const apiKey = PUBLIC_GEMINI_API_KEY || $geminiKey;
+        if (!newMenuName.trim() || !apiKey || isAiLoading) return;
+        isAiLoading = true;
+        try {
+            const suggested = await suggestIngredients(newMenuName.trim(), apiKey);
+            for (const ing of suggested) {
+                if (!pendingIngredients.includes(ing)) {
+                    pendingIngredients = [...pendingIngredients, ing];
+                }
+            }
+        } catch (error: unknown) {
+            console.error("AI 재료 추천 실패:", error);
+        } finally {
+            isAiLoading = false;
         }
     }
 </script>
@@ -553,6 +576,21 @@
                         {/if}
                     </div>
                 </div>
+
+                {#if $aiIngredientsEnabled && newMenuName.trim() && !isDuplicate}
+                    <button
+                        class="btn-ai-ingredient"
+                        on:click={handleAiSuggest}
+                        disabled={isAiLoading}
+                        title="AI가 재료를 자동으로 추천합니다"
+                    >
+                        {#if isAiLoading}
+                            추천 중...
+                        {:else}
+                            ✨ AI 재료 추천
+                        {/if}
+                    </button>
+                {/if}
 
                 <div class="tag-input-wrapper">
                     <input

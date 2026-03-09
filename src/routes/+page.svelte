@@ -7,12 +7,14 @@
     import CalendarTab from "$lib/components/CalendarTab.svelte";
     import StatsTab from "$lib/components/StatsTab.svelte";
     import PromptsTab from "$lib/components/PromptsTab.svelte";
-    import { geminiKey } from "$lib/stores";
+    import { geminiKey, aiIngredientsEnabled } from "$lib/stores";
 
     let activeTab = "calendar";
 
     onMount(() => {
         geminiKey.set(localStorage.getItem("geminiKey") || "");
+        const stored = localStorage.getItem("aiIngredientsEnabled");
+        aiIngredientsEnabled.set(stored === null ? true : stored === "true");
     });
 </script>
 
