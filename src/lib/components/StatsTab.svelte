@@ -23,7 +23,24 @@
     $: totalMenus = menuItems.length;
     $: daysWithData = Object.values(mealData).filter((m) => m.length > 0).length;
     $: totalServings = Object.values(mealData).reduce((s, m) => s + m.length, 0);
-    $: totalIngredients = new Set(menuItems.flatMap((m) => m.ingredients ?? [])).size;
+    $: avgServings = daysWithData > 0 ? +(totalServings / daysWithData).toFixed(1) : 0;
+
+    // ── 연속 기록 (오늘부터 거슬러 올라가는 streak) ──
+    $: currentStreak = (() => {
+        const today = new Date();
+        let streak = 0;
+        for (let i = 0; i < 730; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            const key = d.toISOString().slice(0, 10);
+            if (mealData[key]?.length > 0) {
+                streak++;
+            } else {
+                break;
+            }
+        }
+        return streak;
+    })();
 
     // ── 카테고리 색상 조회 ──
     function getCategoryColor(menuName: string): string {
@@ -114,14 +131,17 @@
             const ym = date.slice(0, 7);
             map[ym] = (map[ym] ?? 0) + menus.length;
         });
+        const thisYear = new Date().getFullYear().toString();
         return Object.entries(map)
             .sort()
             .slice(-6)
-            .map(([ym, count]) => ({
-                label: `${parseInt(ym.slice(5))}월`,
-                count,
-                key: ym,
-            }));
+            .map(([ym, count]) => {
+                const [year, month] = ym.split("-");
+                const label = year === thisYear
+                    ? `${parseInt(month)}월`
+                    : `${year.slice(2)}'${parseInt(month)}월`;
+                return { label, count, key: ym };
+            });
     })();
     $: maxMonthly = Math.max(...monthlyTrend.map((m) => m.count), 1);
 
@@ -170,9 +190,14 @@
                 <div class="summary-label">총 식사 횟수</div>
             </div>
             <div class="summary-card">
-                <div class="summary-icon">🥕</div>
-                <div class="summary-number">{totalIngredients}</div>
-                <div class="summary-label">재료 종류</div>
+                <div class="summary-icon">📊</div>
+                <div class="summary-number">{avgServings}</div>
+                <div class="summary-label">일 평균 식수</div>
+            </div>
+            <div class="summary-card" class:streak-active={currentStreak > 0}>
+                <div class="summary-icon">🔥</div>
+                <div class="summary-number">{currentStreak}</div>
+                <div class="summary-label">연속 기록 (일)</div>
             </div>
         </div>
 
@@ -326,13 +351,13 @@
 
         <!-- ── Row 5: 재료 미지정 메뉴 ── -->
         {#if noIngredientMenus.length > 0}
-            <div class="stats-card full-width">
-                <h3 class="card-title">⚠️ 재료 미지정 메뉴 ({noIngredientMenus.length})</h3>
-                <div class="tag-list">
-                    {#each noIngredientMenus as item}
-                        <span class="tag-item">{item.name}</span>
-                    {/each}
-                </div>
+            <div class="no-ingredient-notice">
+                <span class="notice-icon">⚠️</span>
+                <span class="notice-text">재료 미지정 메뉴 {noIngredientMenus.length}개 —</span>
+                {#each noIngredientMenus as item}
+                    <span class="tag-item">{item.name}</span>
+                {/each}
+                <span class="notice-hint">재료를 등록하면 AI 추천이 더 정확해집니다.</span>
             </div>
         {/if}
     {/if}
@@ -379,7 +404,7 @@
     /* ── 요약 카드 ── */
     .summary-row {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 12px;
     }
 
@@ -393,6 +418,11 @@
         align-items: center;
         gap: 4px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+
+    .summary-card.streak-active {
+        border-color: #ffd43b;
+        background: linear-gradient(135deg, #fffdf0 0%, #fff9cc 100%);
     }
 
     .summary-icon {
@@ -561,19 +591,40 @@
         flex-shrink: 0;
     }
 
-    /* ── 태그 목록 ── */
-    .tag-list {
+    /* ── 재료 미지정 알림 바 ── */
+    .no-ingredient-notice {
         display: flex;
+        align-items: center;
         flex-wrap: wrap;
         gap: 6px;
+        padding: 10px 14px;
+        background: #fffdf0;
+        border: 1px solid #ffe082;
+        border-radius: 10px;
+        font-size: 0.78rem;
+    }
+
+    .notice-icon { font-size: 0.9rem; }
+
+    .notice-text {
+        color: #856404;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .notice-hint {
+        margin-left: auto;
+        color: #aaa;
+        font-size: 0.72rem;
+        white-space: nowrap;
     }
 
     .tag-item {
-        font-size: 0.78rem;
-        padding: 3px 10px;
-        background: #fff8e1;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        background: #fff3cd;
         color: #856404;
         border: 1px solid #ffe082;
-        border-radius: 12px;
+        border-radius: 10px;
     }
 </style>

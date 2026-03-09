@@ -1,13 +1,12 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { askGemini } from "$lib/services/mealService";
     import { PUBLIC_GEMINI_API_KEY } from "$env/static/public";
     import { fetchCategories } from "$lib/services/categories";
     import { fetchMenuItems } from "$lib/services/menuItems";
     import { fetchMealData, saveMealForDate } from "$lib/services/mealData";
     import { fetchPrompts } from "$lib/services/prompts";
     import type { Category, MenuItem, MealEntry, Prompt } from "$lib/types/models";
-    import type { Message, CalendarDay } from "$lib/types/ui";
+    import type { CalendarDay } from "$lib/types/ui";
     import {
         buildCalendarDays,
         dateKey as _dateKey,
@@ -40,57 +39,8 @@
     let activeCategoryFilter: number | null = null;
     let sortOrder: "name" | "category" = "name";
 
-    // AI Chat State
-    let chatInput = "";
-    let chatMessages: Message[] = [];
+    // AI Generation State
     let isConverting = false;
-    let chatMessagesEl: HTMLElement;
-
-    async function handleChatSend() {
-        if (!chatInput.trim() || isConverting) return;
-        const userMsg = chatInput.trim();
-        chatInput = "";
-        chatMessages = [...chatMessages, { role: "user", text: userMsg }];
-        const apiKey = PUBLIC_GEMINI_API_KEY || $geminiKey;
-        if (!apiKey) {
-            chatMessages = [
-                ...chatMessages,
-                {
-                    role: "ai",
-                    text: "오류: Gemini API 키가 설정되지 않았습니다. 환경설정 탭에서 키를 입력해주세요.",
-                },
-            ];
-            return;
-        }
-        isConverting = true;
-        try {
-            const availableMenus = menuItems.map((m) => m.name);
-            const aiResponse = await askGemini(
-                userMsg,
-                apiKey,
-                availableMenus,
-                prompts,
-            );
-            chatMessages = [...chatMessages, { role: "ai", text: aiResponse }];
-        } catch (error: any) {
-            chatMessages = [
-                ...chatMessages,
-                { role: "ai", text: `오류: ${error.message}` },
-            ];
-        } finally {
-            isConverting = false;
-            setTimeout(() => {
-                if (chatMessagesEl) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-            }, 10);
-        }
-    }
-
-    function handleChatKeydown(e: KeyboardEvent) {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleChatSend();
-        }
-    }
 
     // Panel menu filter
     $: filteredMenuItems = menuItems.filter((item) => {
@@ -670,53 +620,9 @@
                 </div>
             </div>
         {:else}
-            <div class="ai-chat-header">🤖 AI 식단 변환기</div>
-            <div class="side-chat-messages" bind:this={chatMessagesEl}>
-                <div class="side-chat-msg ai">
-                    날짜를 클릭하면 식단을 선택할 수 있습니다.<br />또는 식단
-                    텍스트를 붙여넣으면 분석해드릴게요!
-                </div>
-                {#each chatMessages as msg}
-                    <div class="side-chat-msg {msg.role}">{msg.text}</div>
-                {/each}
-                {#if isConverting}
-                    <div class="side-chat-msg ai">
-                        <div class="loading-dots">
-                            <div class="dot"></div>
-                            <div class="dot"></div>
-                            <div class="dot"></div>
-                        </div>
-                    </div>
-                {/if}
-            </div>
-            <div class="side-chat-input-area">
-                <textarea
-                    class="side-chat-input"
-                    placeholder="식단 텍스트를 입력하세요..."
-                    rows="2"
-                    bind:value={chatInput}
-                    on:keydown={handleChatKeydown}
-                ></textarea>
-                <button
-                    class="btn-send-side"
-                    on:click={handleChatSend}
-                    disabled={isConverting || !chatInput.trim()}
-                    aria-label="전송"
-                >
-                    <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                </button>
+            <div class="panel-empty-hint">
+                <div class="panel-empty-icon">📅</div>
+                <div class="panel-empty-text">날짜를 클릭하면<br/>식단을 입력할 수 있습니다.</div>
             </div>
         {/if}
     </div>
