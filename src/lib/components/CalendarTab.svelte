@@ -6,7 +6,7 @@
     import { fetchMenuItems } from "$lib/services/menuItems";
     import { fetchMealData, saveMealForDate } from "$lib/services/mealData";
     import { fetchPrompts } from "$lib/services/prompts";
-    import type { Category, MenuItem, Prompt } from "$lib/types/models";
+    import type { Category, MenuItem, MealEntry, Prompt } from "$lib/types/models";
     import type { Message, CalendarDay } from "$lib/types/ui";
     import {
         buildCalendarDays,
@@ -25,7 +25,7 @@
     import html2canvas from "html2canvas";
 
     let currentDate = new Date();
-    let mealData: Record<string, string[]> = {};
+    let mealData: Record<string, MealEntry[]> = {};
     let categories: Category[] = [];
     let menuItems: MenuItem[] = [];
     let prompts: Prompt[] = [];
@@ -188,11 +188,10 @@
     function addMealToDate(menuName: string) {
         if (!selectedDate) return;
         const currentMeals = mealData[selectedDate] || [];
-        // Prevent duplicate adds if already present
-        if (!currentMeals.includes(menuName)) {
+        if (!currentMeals.some((e) => e.name === menuName)) {
             mealData = {
                 ...mealData,
-                [selectedDate]: [...currentMeals, menuName],
+                [selectedDate]: [...currentMeals, menuNameToEntry(menuName)],
             };
             saveMealData();
         }
@@ -219,10 +218,14 @@
 
         isConverting = true;
         try {
-            const windowDates = getWindowDates(mealData, targetDate);
+            // mealGeneration 함수들은 string[] 기반이므로 이름만 추출
+            const mealDataNames: Record<string, string[]> = Object.fromEntries(
+                Object.entries(mealData).map(([d, entries]) => [d, entries.map((e) => e.name)]),
+            );
+            const windowDates = getWindowDates(mealDataNames, targetDate);
             const availableMenusText = buildAvailableMenusText(menuItems, categories);
-            const recentMealsText = buildRecentMealsText(mealData, targetDate, windowDates);
-            const categoryScores = calculateMenuScores(menuItems, categories, mealData, targetDate, windowDates);
+            const recentMealsText = buildRecentMealsText(mealDataNames, targetDate, windowDates);
+            const categoryScores = calculateMenuScores(menuItems, categories, mealDataNames, targetDate, windowDates);
             const frequencyData = formatScoreTable(categoryScores);
 
             const allMenuNames = menuItems.map((m) => m.name);
@@ -238,12 +241,13 @@
                 prompts,
             );
 
-            const updatedMeals = parseAIMenuResponse(aiResponse, allMenuNames);
+            const updatedNames = parseAIMenuResponse(aiResponse, allMenuNames);
 
-            if (updatedMeals.length > 0) {
-                mealData = { ...mealData, [targetDate]: updatedMeals };
+            if (updatedNames.length > 0) {
+                const updatedEntries = updatedNames.map(menuNameToEntry);
+                mealData = { ...mealData, [targetDate]: updatedEntries };
                 localStorage.setItem("mealData", JSON.stringify(mealData));
-                saveMealForDate(targetDate, updatedMeals);
+                saveMealForDate(targetDate, updatedEntries);
             } else {
                 alert(
                     "AI가 추천한 메뉴가 메뉴 목록에 없거나 파싱에 실패했습니다.\n다시 시도해보세요.",
@@ -331,28 +335,30 @@
         return item?.category_id || null;
     }
 
+    function menuNameToEntry(name: string): MealEntry {
+        const item = menuItems.find((m) => m.name === name);
+        const cat = item?.category_id != null ? categories.find((c) => c.id === item.category_id) : null;
+        return { name, category_id: item?.category_id ?? null, color: cat?.color ?? "#ced4da" };
+    }
+
     function dateKey(day: number): string {
         return _dateKey(year, month, day);
     }
 
     function getMenus(
         cd: CalendarDay,
-        md: Record<string, string[]>,
+        md: Record<string, MealEntry[]>,
         catFilter: number | null,
         searchText: string,
-    ): string[] {
+    ): MealEntry[] {
         if (cd.isOtherMonth) return [];
         let menus = md[dateKey(cd.day)] || [];
-        // Apply calendar-level filters
         if (catFilter !== null) {
-            menus = menus.filter((m) => {
-                const catId = getMenuCategoryId(m);
-                return catId === catFilter;
-            });
+            menus = menus.filter((m) => m.category_id === catFilter);
         }
         if (searchText) {
             const q = searchText.toLowerCase();
-            menus = menus.filter((m) => m.toLowerCase().includes(q));
+            menus = menus.filter((m) => m.name.toLowerCase().includes(q));
         }
         return menus;
     }
@@ -523,8 +529,8 @@
                             {#if menus.length > 0}
                                 <ul class="cell-menu-list">
                                     {#each menus as menu}
-                                        <li class="cell-menu-item" style="--item-color: {getMenuColor(menu)};">
-                                            {menu}
+                                        <li class="cell-menu-item" style="--item-color: {getMenuColor(menu.name)};">
+                                            {menu.name}
                                         </li>
                                     {/each}
                                 </ul>
@@ -579,12 +585,12 @@
                     </div>
                 {:else}
                     <div class="selected-meals">
-                        {#each selectedDateMeals as menu, index}
+                        {#each selectedDateMeals as meal, index}
                             <div
                                 class="selected-meal-item"
                                 class:dragging={draggedIdx === index}
                                 class:drag-over={dragOverIdx === index && draggedIdx !== index}
-                                style="border-left: 3px solid {getMenuColor(menu)};"
+                                style="border-left: 3px solid {getMenuColor(meal.name)};"
                                 draggable="true"
                                 on:dragstart={(e) => handleDragStart(e, index)}
                                 on:dragover={(e) => handleDragOver(e, index)}
@@ -593,7 +599,7 @@
                                 on:dragend={handleDragEnd}
                                 role="listitem"
                             >
-                                <span class="meal-name">{menu}</span>
+                                <span class="meal-name">{meal.name}</span>
                                 <button class="btn-remove-meal" on:click={() => removeMealFromDate(index)}>×</button>
                             </div>
                         {/each}
@@ -639,7 +645,7 @@
                         </div>
                     {:else}
                         {#each filteredMenuItems as item}
-                            {@const isAdded = selectedDateMeals.includes(item.name)}
+                            {@const isAdded = selectedDateMeals.some((e) => e.name === item.name)}
                             <div class="menu-row" class:is-added={isAdded}>
                                 <div class="menu-info">
                                     <div class="menu-title-row">

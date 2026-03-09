@@ -3,11 +3,11 @@
     import { fetchCategories } from "$lib/services/categories";
     import { fetchMenuItems } from "$lib/services/menuItems";
     import { fetchMealData } from "$lib/services/mealData";
-    import type { Category, MenuItem } from "$lib/types/models";
+    import type { Category, MenuItem, MealEntry } from "$lib/types/models";
 
     let categories: Category[] = [];
     let menuItems: MenuItem[] = [];
-    let mealData: Record<string, string[]> = {};
+    let mealData: Record<string, MealEntry[]> = {};
     let loading = true;
 
     onMount(async () => {
@@ -37,8 +37,8 @@
         const cnt: Record<string, number> = {};
         Object.values(mealData)
             .flat()
-            .forEach((m) => {
-                cnt[m] = (cnt[m] ?? 0) + 1;
+            .forEach((entry) => {
+                cnt[entry.name] = (cnt[entry.name] ?? 0) + 1;
             });
         return Object.entries(cnt)
             .sort((a, b) => b[1] - a[1])
@@ -51,11 +51,10 @@
         const cnt = new Map<string, { count: number; color: string }>();
         Object.values(mealData)
             .flat()
-            .forEach((menuName) => {
-                const item = menuItems.find((m) => m.name === menuName);
+            .forEach((entry) => {
                 const cat =
-                    item?.category_id != null
-                        ? categories.find((c) => c.id === item.category_id)
+                    entry.category_id != null
+                        ? categories.find((c) => c.id === entry.category_id)
                         : null;
                 const key = cat?.name ?? "미분류";
                 const color = cat?.color ?? "#ced4da";
