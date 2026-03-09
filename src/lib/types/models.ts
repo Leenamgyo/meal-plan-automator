@@ -16,10 +16,16 @@ export interface MenuItem {
     ingredients: string[];
 }
 
+export interface MealEntry {
+    name: string;
+    category_id: number | null;
+    color: string;
+}
+
 export interface MealRecord {
     id?: number;
     date: string;
-    menus: string[];
+    menus: MealEntry[];
 }
 
 export interface Prompt {
