@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verdant Core - Design System Assets</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --primary-deep: #006E1C;
+            --secondary: #136964;
+            --tertiary: #A63360;
+            --bg: #F8F9FA;
+            --surface: #FFFFFF;
+            --text: #191C1D;
+        }
+        body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg); color: var(--text); padding: 40px; }
+        
+        header { border-bottom: 1px solid #ddd; padding-bottom: 20px; margin-bottom: 40px; }
+        header h1 { margin: 0; font-size: 2.5rem; letter-spacing: -1px; font-weight: 900; }
+        header p { margin: 5px 0 20px; color: var(--primary-deep); font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
+        
+        nav { display: flex; gap: 30px; }
+        nav span { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: bold; color: #666; cursor: pointer; }
+        nav span i { font-size: 18px; }
+
+        section { margin-bottom: 60px; }
+        section h2 { font-size: 1.2rem; border-left: 4px solid var(--primary); padding-left: 15px; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
+        section h2 small { font-size: 0.8rem; background: #eee; padding: 2px 8px; border-radius: 4px; color: #888; }
+
+        .swatch-main { background: white; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .color-box { width: 100px; height: 100px; border-radius: 12px; }
+        .swatch-main h3 { margin: 0 0 5px; font-size: 1.4rem; }
+        .swatch-main p { margin: 0; color: #888; font-family: monospace; }
+
+        .color-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        .color-list li { background: white; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px; border: 1px solid #eee; }
+        .dot { width: 24px; height: 24px; border-radius: 50%; display: block; }
+
+        .principles { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .principle { background: white; padding: 30px; border-radius: 16px; border: 1px solid #eee; }
+        .principle i { font-size: 32px; color: var(--primary-deep); margin-bottom: 15px; display: block; }
+        .principle h3 { margin: 0 0 10px; font-size: 1.1rem; }
+        .principle p { margin: 0; color: #666; line-height: 1.6; font-size: 0.95rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>VERDANT CORE</h1>
+        <p>Curated Greenhouse Design System</p>
+        <nav>
+            <span><i class="material-icons">fingerprint</i> Identity</span>
+            <span><i class="material-icons">palette</i> Palette</span>
+            <span><i class="material-icons">match_case</i> Typography</span>
+        </nav>
+    </header>
+
+    <section class="color-palette">
+        <h2>COLOR PALETTE <small>v1.2 Stable</small></h2>
+        <div class="swatch-main">
+            <div class="color-box" style="background: var(--primary);"></div>
+            <div class="info">
+                <h3>AVOCADO GREEN</h3>
+                <p>PRIMARY BRAND #4CAF50</p>
+            </div>
+        </div>
+        
+        <ul class="color-list">
+            <li><span class="dot" style="background: var(--primary-deep);"></span> <div><strong>Deep Forest</strong><br><small>#006E1C</small></div></li>
+            <li><span class="dot" style="background: var(--secondary);"></span> <div><strong>Sage Teal</strong><br><small>#136964</small></div></li>
+            <li><span class="dot" style="background: var(--tertiary);"></span> <div><strong>Hibiscus Rose</strong><br><small>#A63360</small></div></li>
+            <li><span class="dot" style="background: #F26F9D;"></span> <div><strong>Petal Pink</strong><br><small>#F26F9D</small></div></li>
+        </ul>
+    </section>
+
+    <section class="design-principles">
+        <h2>DESIGN PRINCIPLES</h2>
+        <div class="principles">
+            <div class="principle">
+                <i class="material-icons">eco</i>
+                <h3>ORGANIC DEPTH</h3>
+                <p>Depth is achieved through tonal layering and material shifts rather than traditional drop shadows. This creates a breathing, organic feel.</p>
+            </div>
+            <div class="principle">
+                <i class="material-icons">layers</i>
+                <h3>THE LAYERING RULE</h3>
+                <p>Prohibit the use of 1px borders. Section boundaries must be defined solely through background color shifts (e.g., surface to surface_container_low).</p>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

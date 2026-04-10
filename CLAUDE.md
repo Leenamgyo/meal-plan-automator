@@ -8,7 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 npm install
 
-# Development: build + run Electron app
+# Frontend-only dev server (SvelteKit only; no Electron, no API)
+npm run dev
+
+# Development: build + run Electron app (full stack)
 npm start
 
 # Build SvelteKit static output only (+ fixes asset paths for Electron)
@@ -19,6 +22,9 @@ node scripts/seed.js
 
 # Package as distributable
 npm run dist
+
+# Clear Electron localStorage (run while app is closed)
+node clear-storage.js
 ```
 
 There are no lint or test commands configured in this project.
@@ -200,21 +206,26 @@ src/lib/
 │   ├── calendarUtils.ts  # 달력 날짜 계산 (buildCalendarDays, dateKey, isToday)
 │   └── arrayUtils.ts     # 배열 순서 변경 (moveItemUp, moveItemDown, swapItems)
 ├── stores/
-│   └── index.ts          # geminiKey writable store
+│   └── index.ts          # geminiKey, toastMessage, confirmDialog writable stores + showSuccess(), showConfirm() helpers
 └── components/
-    ├── CalendarTab.svelte
-    ├── MenuTab.svelte
-    ├── StatsTab.svelte
-    ├── SettingsTab.svelte
-    └── PromptsTab.svelte
+    ├── CalendarTab.svelte     # Planner Module (PLN)
+    ├── MenuTab.svelte         # Inventory Module (INV)
+    ├── SettingsTab.svelte     # Settings Module (SET)
+    ├── StatsTab.svelte        # (unused — kept for reference)
+    ├── AlertSuccess.svelte    # COM-001: 우상단 toast 알림 (전역)
+    ├── AlertConfirm.svelte    # COM-002: 삭제 확인 다이얼로그 (전역)
+    ├── ModalNewEntrySelection.svelte  # INV-004: 단품/콤보 선택 모달
+    ├── ModalMenuRegistry.svelte       # INV-002: 단품 메뉴 등록 모달
+    └── ModalComboRegistry.svelte      # INV-003: 콤보 등록 모달
 ```
 
 **Import 규칙:**
 - 타입 → `$lib/types/models` 또는 `$lib/types/ui` (또는 배럴 `$lib/types`)
 - HTTP 인프라 → `$lib/services/db`
-- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts}`
+- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts|combos}`
 - AI → `$lib/services/gemini` (순수 API) 또는 `$lib/services/mealService` (도메인)
-- 상태 → `$lib/stores` (`geminiKey` store, prop drilling 없음)
+- 상태 → `$lib/stores` (`geminiKey`, `toastMessage`, `confirmDialog` store + `showSuccess()`, `showConfirm()` helpers)
+- **`PUBLIC_GEMINI_API_KEY` env var는 .env에 없으므로 `$env/static/public`에서 import 금지 — `$geminiKey` store만 사용**
 
 ### SQLite Schema (auto-created in `main.cjs`)
 
@@ -224,18 +235,26 @@ src/lib/
 | `menu_items` | `id`, `name`, `category_id`, `ingredients` (JSON array) | FK → categories (SET NULL on delete) |
 | `meal_data` | `date` (UNIQUE), `menus` (JSON array of MealEntry objects) | Upsert on conflict. MealEntry = `{ name, category_id, color }`. Old string[] data is normalized on fetch. |
 | `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | Gemini prompt templates, seeded at startup |
+| `combos` | `id`, `name`, `description`, `is_active` | 콤보 메뉴 |
+| `combo_items` | `combo_id`, `menu_item_id` (PK 복합) | 콤보↔단품 매핑, CASCADE DELETE |
 
 ### Tab Components
 
 Single-page app with tab-based navigation in `src/routes/+page.svelte`. The active tab is tracked with a local `activeTab` variable — no router.
 
-| Tab component | Purpose |
-|---|---|
-| `CalendarTab.svelte` | Monthly calendar view + right panel for daily meal selection + AI chat |
-| `MenuTab.svelte` | Full CRUD for menu items (card grid) |
-| `StatsTab.svelte` | Category/ingredient statistics dashboard |
-| `SettingsTab.svelte` | API key, category management, general settings |
-| `PromptsTab.svelte` | Prompt CRUD (system prompts: json_parser, chat_base, auto_gen) |
+| Tab id | Component | Purpose |
+|---|---|---|
+| `planner` | `CalendarTab.svelte` | Planner Module: 월간 캘린더 + 큐레이션 패널 (더블클릭 배정/삭제, AI Recommend 탭) |
+| `inventory` | `MenuTab.svelte` | Inventory Module: 단품+콤보 통합 관리, 3종 등록 모달 플로우 |
+| `settings` | `SettingsTab.svelte` | Settings Module: API 키, 카테고리, AI 프롬프트 관리 |
+
+**Planner 인터랙션:**
+- 날짜 단일클릭 → 선택 + 패널 열기
+- 패널 메뉴 더블클릭 → 선택 날짜에 즉시 배정
+- 캘린더 셀 메뉴 태그 더블클릭 → 즉시 삭제
+- Panel 토글 버튼 or 우측 chevron → 패널 접기/펼치기
+
+> `PromptsTab.svelte` deleted (functionality merged into SettingsTab).
 
 ### Gemini AI Integration
 
@@ -243,7 +262,9 @@ Single-page app with tab-based navigation in `src/routes/+page.svelte`. The acti
 - `mealService.ts` — `askGemini()`, `convertMealText()`: DB 프롬프트 조회 + 메뉴 제약 주입
 - `mealGeneration.ts` — 날짜 창 계산, 점수 산출, 프롬프트 문자열 생성, 응답 파싱
 
-`geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. 환경변수 `PUBLIC_GEMINI_API_KEY`보다 런타임 키가 우선.
+`geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$geminiKey`)만 사용.
+
+**Gemini model:** `gemini-2.5-flash-lite` (빠르고 가벼운 모델 사용)
 
 ### Environment Variables
 
@@ -256,6 +277,28 @@ PUBLIC_GEMINI_API_KEY=your_key_here
 ### Korean Text Search
 
 `src/lib/utils/hangul.ts` provides Korean phoneme decomposition for fuzzy search within the menu selection panel.
+
+### Design System
+
+The `docs/` directory is the design source of truth: mockup screens (`docs/*/`), `docs/PRD.md`, and `docs/14_design_system/DESIGN.md`. Key rules:
+
+- **No border lines** — use background color (tonal layering) for area separation, never `1px solid` borders
+- **Organic shapes** — `rounded-xl` / `rounded-full`, generous padding; avoid sharp corners
+- **Glassmorphism** — floating elements (modals, nav) use `backdrop-blur` + semi-transparency
+- **Fonts** — headings: `Plus Jakarta Sans`; body/data: `Inter`
+- **Color** — Primary: `#006e1c` (dark green), Primary Container: `#4caf50` (light green)
+
+Before implementing any UI change, check the relevant screen mockup in `docs/`.
+
+### Tailwind CSS Setup (v3)
+
+Tailwind CSS v3 is installed as a PostCSS plugin. Config files:
+- `tailwind.config.js` — color tokens, font families (`headline`/`body`/`label`), border-radius
+- `postcss.config.js` — `tailwindcss` + `autoprefixer`
+- `src/app.css` — `@tailwind base/components/utilities` directives + `.glass-panel`, `.signature-gradient` utilities
+- `src/app.html` — Google Fonts (Plus Jakarta Sans, Inter) + Material Symbols Outlined icons
+
+Custom color tokens mirror the design system exactly (e.g. `bg-surface`, `bg-surface-container-low`, `text-primary`, etc).
 
 ### Build Notes
 

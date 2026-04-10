@@ -49,6 +49,20 @@ function initDatabase() {
       content TEXT NOT NULL,
       is_active INTEGER DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS combos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS combo_items (
+      combo_id INTEGER NOT NULL REFERENCES combos(id) ON DELETE CASCADE,
+      menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+      PRIMARY KEY (combo_id, menu_item_id)
+    );
   `);
 
   // 프롬프트 초기 시드 추가
@@ -337,6 +351,71 @@ async function handleAPI(req, res) {
   if (promptMatch && method === 'DELETE') {
     const id = decodeURIComponent(promptMatch[1]);
     db.prepare('DELETE FROM prompts WHERE id = ?').run(id);
+    return sendJSON(res, { success: true });
+  }
+
+  // ===== Combos =====
+  if (url === '/api/combos' && method === 'GET') {
+    const combos = db.prepare('SELECT * FROM combos ORDER BY created_at').all();
+    const result = combos.map(combo => {
+      const itemRows = db.prepare(`
+        SELECT mi.* FROM menu_items mi
+        JOIN combo_items ci ON ci.menu_item_id = mi.id
+        WHERE ci.combo_id = ?
+      `).all(combo.id);
+      return {
+        ...combo,
+        items: itemRows.map(r => ({ ...r, ingredients: JSON.parse(r.ingredients || '[]') }))
+      };
+    });
+    return sendJSON(res, result);
+  }
+
+  if (url === '/api/combos' && method === 'POST') {
+    const body = await parseBody(req);
+    if (!body.name) return sendJSON(res, { error: 'name required' }, 400);
+    const result = db.prepare('INSERT INTO combos (name, description) VALUES (?, ?)').run(
+      body.name, body.description || ''
+    );
+    const comboId = result.lastInsertRowid;
+    if (Array.isArray(body.item_ids)) {
+      const insertItem = db.prepare('INSERT OR IGNORE INTO combo_items (combo_id, menu_item_id) VALUES (?, ?)');
+      for (const itemId of body.item_ids) insertItem.run(comboId, itemId);
+    }
+    const combo = db.prepare('SELECT * FROM combos WHERE id = ?').get(comboId);
+    const items = db.prepare(`
+      SELECT mi.* FROM menu_items mi JOIN combo_items ci ON ci.menu_item_id = mi.id WHERE ci.combo_id = ?
+    `).all(comboId);
+    return sendJSON(res, { ...combo, items: items.map(r => ({ ...r, ingredients: JSON.parse(r.ingredients || '[]') })) }, 201);
+  }
+
+  const comboMatch = url.match(/^\/api\/combos\/(\d+)$/);
+  if (comboMatch && method === 'PUT') {
+    const id = parseInt(comboMatch[1]);
+    const body = await parseBody(req);
+    const existing = db.prepare('SELECT * FROM combos WHERE id = ?').get(id);
+    if (!existing) return sendJSON(res, { error: 'not found' }, 404);
+    db.prepare('UPDATE combos SET name = ?, description = ?, is_active = ? WHERE id = ?').run(
+      body.name ?? existing.name,
+      body.description ?? existing.description,
+      body.is_active ?? existing.is_active,
+      id
+    );
+    if (Array.isArray(body.item_ids)) {
+      db.prepare('DELETE FROM combo_items WHERE combo_id = ?').run(id);
+      const insertItem = db.prepare('INSERT OR IGNORE INTO combo_items (combo_id, menu_item_id) VALUES (?, ?)');
+      for (const itemId of body.item_ids) insertItem.run(id, itemId);
+    }
+    const combo = db.prepare('SELECT * FROM combos WHERE id = ?').get(id);
+    const items = db.prepare(`
+      SELECT mi.* FROM menu_items mi JOIN combo_items ci ON ci.menu_item_id = mi.id WHERE ci.combo_id = ?
+    `).all(id);
+    return sendJSON(res, { ...combo, items: items.map(r => ({ ...r, ingredients: JSON.parse(r.ingredients || '[]') })) });
+  }
+
+  if (comboMatch && method === 'DELETE') {
+    const id = parseInt(comboMatch[1]);
+    db.prepare('DELETE FROM combos WHERE id = ?').run(id);
     return sendJSON(res, { success: true });
   }
 

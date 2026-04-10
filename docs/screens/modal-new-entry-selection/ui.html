@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Living Kitchen - New Entry Selection Branch</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root { --primary: #2d5a27; --border: #e0e0e0; }
+        body { font-family: 'Pretendard', sans-serif; margin: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; height: 100vh; }
+        
+        .selection-branch-card { background: white; width: 600px; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 50px rgba(0,0,0,0.3); padding: 2rem; }
+        .branch-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; }
+        .title-group h2 { margin: 0; font-size: 1.5rem; letter-spacing: 1px; color: #333; }
+        .title-group p { margin: 5px 0 0; color: #666; font-size: 0.95rem; }
+        .close-btn { background: none; border: none; cursor: pointer; color: #aaa; }
+
+        .branch-options { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .branch-option { border: 1px solid var(--border); border-radius: 16px; padding: 2rem; text-align: center; transition: all 0.3s; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
+        .branch-option:hover { border-color: var(--primary); background: #f1f8e9; transform: translateY(-5px); }
+        
+        .icon-box { width: 64px; height: 64px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
+        .branch-option:hover .icon-box { background: white; color: var(--primary); }
+        .icon-box .material-icons { font-size: 32px; }
+
+        .option-content h3 { margin: 0 0 10px; font-size: 1.2rem; color: #333; }
+        .option-content p { margin: 0 0 1.5rem; font-size: 0.85rem; color: #888; line-height: 1.5; }
+        
+        .btn-link { background: none; border: none; color: var(--primary); font-weight: bold; font-size: 0.85rem; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+        .branch-footer { margin-top: 2rem; text-align: center; border-top: 1px solid #f5f5f5; padding-top: 1.5rem; }
+        .branch-footer p { margin: 0; font-size: 0.75rem; color: #ccc; text-transform: uppercase; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <div class="selection-branch-card">
+        <header class="branch-header">
+            <div class="title-group">
+                <h2>ADD NEW ENTRY</h2>
+                <p>Select how you want to expand your menu collection.</p>
+            </div>
+            <button class="close-btn"><span class="material-icons">close</span></button>
+        </header>
+
+        <div class="branch-options">
+            <div class="branch-option">
+                <div class="icon-box">
+                    <span class="material-icons">restaurant</span>
+                </div>
+                <div class="option-content">
+                    <h3>ADD MENU</h3>
+                    <p>Create a single standalone dish with unique nutritional data and ingredients.</p>
+                    <button class="btn-link">GET STARTED <span class="material-icons">arrow_forward</span></button>
+                </div>
+            </div>
+
+            <div class="branch-option">
+                <div class="icon-box">
+                    <span class="material-icons">set_meal</span>
+                </div>
+                <div class="option-content">
+                    <h3>ADD COMBO</h3>
+                    <p>Bundle multiple existing items into a curated meal set or daily plan.</p>
+                    <button class="btn-link">GET STARTED <span class="material-icons">arrow_forward</span></button>
+                </div>
+            </div>
+        </div>
+
+        <footer class="branch-footer">
+            <p>Powered by The Living Kitchen Studio</p>
+        </footer>
+    </div>
+</body>
+</html>

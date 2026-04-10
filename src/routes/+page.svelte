@@ -5,134 +5,74 @@
     import MenuTab from "$lib/components/MenuTab.svelte";
     import SettingsTab from "$lib/components/SettingsTab.svelte";
     import CalendarTab from "$lib/components/CalendarTab.svelte";
-    import StatsTab from "$lib/components/StatsTab.svelte";
-    import PromptsTab from "$lib/components/PromptsTab.svelte";
+    import AlertSuccess from "$lib/components/AlertSuccess.svelte";
+    import AlertConfirm from "$lib/components/AlertConfirm.svelte";
     import { geminiKey, aiIngredientsEnabled } from "$lib/stores";
 
-    let activeTab = "calendar";
+    let activeTab = "planner";
 
     onMount(() => {
         geminiKey.set(localStorage.getItem("geminiKey") || "");
         const stored = localStorage.getItem("aiIngredientsEnabled");
         aiIngredientsEnabled.set(stored === null ? true : stored === "true");
     });
+
+    const tabs = [
+        { id: "planner",   label: "Planner",   icon: "calendar_month" },
+        { id: "inventory", label: "Inventory", icon: "inventory_2" },
+        { id: "settings",  label: "Settings",  icon: "settings" },
+    ];
 </script>
 
 <svelte:head>
     <title>밀차트 자동화</title>
 </svelte:head>
 
-<header>
-    <div class="mac-traffic-lights">
-        <div class="traffic-light tl-red"></div>
-        <div class="traffic-light tl-yellow"></div>
-        <div class="traffic-light tl-green"></div>
+<!-- Global overlays -->
+<AlertSuccess />
+<AlertConfirm />
+
+<header class="bg-surface/80 backdrop-blur-xl fixed top-0 z-50 w-full border-b border-surface-container-high">
+    <div class="flex items-center justify-between w-full px-6 py-3 max-w-[1920px] mx-auto">
+        <!-- 좌측: Traffic Lights + 로고 -->
+        <div class="flex items-center gap-4">
+            <div class="flex gap-2 no-drag mr-2">
+                <div class="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e]"></div>
+                <div class="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123]"></div>
+                <div class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]"></div>
+            </div>
+            <span class="text-xl font-extrabold tracking-tighter text-primary font-headline">Meal Chart</span>
+        </div>
+
+        <!-- 중앙: 탭 내비게이션 -->
+        <nav class="flex items-center gap-1 p-1 bg-surface-container-low rounded-full no-drag">
+            {#each tabs as tab}
+                <button
+                    class="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-bold transition-all
+                           {activeTab === tab.id
+                             ? 'bg-surface-container-lowest text-primary shadow-sm'
+                             : 'text-on-surface-variant hover:bg-surface-container-lowest/60'}"
+                    on:click={() => (activeTab = tab.id)}
+                >
+                    <span class="material-symbols-outlined" style="font-size:18px; line-height:1">{tab.icon}</span>
+                    {tab.label}
+                </button>
+            {/each}
+        </nav>
+
+        <!-- 우측: 빈 공간 (대칭 유지) -->
+        <div class="w-[140px]"></div>
     </div>
-    <nav class="tabs">
-        <button
-            class="tab-btn"
-            class:active={activeTab === "calendar"}
-            on:click={() => (activeTab = "calendar")}
-        >
-            <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-            >
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            식단표
-        </button>
-        <button
-            class="tab-btn"
-            class:active={activeTab === "menu"}
-            on:click={() => (activeTab = "menu")}
-        >
-            <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-            >
-                <line x1="8" y1="6" x2="21" y2="6"></line>
-                <line x1="8" y1="12" x2="21" y2="12"></line>
-                <line x1="8" y1="18" x2="21" y2="18"></line>
-                <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-            메뉴 관리
-        </button>
-        <button
-            class="tab-btn"
-            class:active={activeTab === "stats"}
-            on:click={() => (activeTab = "stats")}
-        >
-            <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-            >
-                <line x1="18" y1="20" x2="18" y2="10"></line>
-                <line x1="12" y1="20" x2="12" y2="4"></line>
-                <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-            통계
-        </button>
-        <button
-            class="tab-btn"
-            class:active={activeTab === "prompts"}
-            on:click={() => (activeTab = "prompts")}
-        >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-            프롬프트
-        </button>
-        <button
-            class="tab-btn"
-            class:active={activeTab === "settings"}
-            on:click={() => (activeTab = "settings")}
-        >
-            <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-            >
-                <circle cx="12" cy="12" r="3"></circle>
-                <path
-                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-                ></path>
-            </svg>
-            환경설정
-        </button>
-    </nav>
 </header>
 
-<main>
-    {#if activeTab === "menu"}
-        <MenuTab />
-    {:else if activeTab === "calendar"}
-        <CalendarTab />
-    {:else if activeTab === "stats"}
-        <StatsTab />
-    {:else if activeTab === "prompts"}
-        <PromptsTab />
-    {:else if activeTab === "settings"}
-        <SettingsTab />
-    {/if}
+<main class="pt-[56px] h-screen flex flex-col bg-surface">
+    <div class="flex-1 overflow-hidden relative">
+        {#if activeTab === "planner"}
+            <CalendarTab />
+        {:else if activeTab === "inventory"}
+            <MenuTab />
+        {:else if activeTab === "settings"}
+            <SettingsTab />
+        {/if}
+    </div>
 </main>
