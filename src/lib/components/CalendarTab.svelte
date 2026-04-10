@@ -1,6 +1,14 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { fly } from "svelte/transition";
+    import { cubicOut } from "svelte/easing";
+
+    function panelSlide(node: Element, { duration = 260 }: { duration?: number } = {}) {
+        return {
+            duration,
+            easing: cubicOut,
+            css: (t: number) => `transform: translateX(${(1 - t) * 100}%);`,
+        };
+    }
     import { fetchCategories } from "$lib/services/categories";
     import { fetchMenuItems } from "$lib/services/menuItems";
     import { fetchMealData, saveMealForDate } from "$lib/services/mealData";
@@ -303,9 +311,7 @@
 <div class="flex h-full overflow-hidden relative">
     <!-- Left: Calendar Main -->
     <div
-        class="flex flex-col p-6 overflow-y-auto custom-scrollbar pb-20 transition-all duration-[260ms]"
-        class:flex-1={showPanel}
-        class:w-full={!showPanel}
+        class="flex-1 flex flex-col p-6 overflow-y-auto custom-scrollbar pb-20"
         bind:this={calendarEl}
     >
         <div class="max-w-6xl mx-auto w-full">
@@ -432,7 +438,7 @@
     {#if showPanel}
     <aside
         class="w-80 flex-shrink-0 bg-surface-container-lowest flex flex-col shadow-xl no-drag"
-        transition:fly={{ x: 320, duration: 260, opacity: 1 }}
+        transition:panelSlide
     >
         <!-- Sidebar Header -->
         <div class="p-6 pb-0">
