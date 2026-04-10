@@ -22,9 +22,9 @@
     let activeSection: "profile" | "categories" | "prompts" = "profile";
 
     const sections = [
-        { id: "profile",    icon: "storefront", label: "Restaurant Profile" },
-        { id: "categories", icon: "category",   label: "Category Management" },
-        { id: "prompts",    icon: "terminal",   label: "AI Prompt Management" },
+        { id: "profile", icon: "storefront", label: "Restaurant Profile" },
+        { id: "categories", icon: "category", label: "Category Management" },
+        { id: "prompts", icon: "terminal", label: "AI Prompt Management" },
     ] as const;
 
     // ── Profile ──────────────────────────────────────────────
@@ -63,7 +63,8 @@
         const items = await fetchMenuItems();
         for (const item of items) {
             if (item.category_id != null) {
-                menuCountMap[item.category_id] = (menuCountMap[item.category_id] ?? 0) + 1;
+                menuCountMap[item.category_id] =
+                    (menuCountMap[item.category_id] ?? 0) + 1;
             }
         }
         menuCountMap = { ...menuCountMap };
@@ -83,7 +84,8 @@
 
     async function removeCategory(id: number) {
         if (!confirm("이 카테고리를 삭제할까요?")) return;
-        if (await deleteCategory(id)) categories = categories.filter((c) => c.id !== id);
+        if (await deleteCategory(id))
+            categories = categories.filter((c) => c.id !== id);
     }
 
     // ── Profile save ─────────────────────────────────────────
@@ -93,7 +95,11 @@
         localStorage.setItem("restaurantDesc", restaurantDesc);
         for (let i = 0; i < categories.length; i++) {
             const cat = categories[i];
-            await updateCategory(cat.id, { name: cat.name, color: cat.color, sort_order: i });
+            await updateCategory(cat.id, {
+                name: cat.name,
+                color: cat.color,
+                sort_order: i,
+            });
             cat.sort_order = i;
         }
         saveMsgVisible = true;
@@ -131,17 +137,41 @@
         saveMsg = "";
         try {
             if (isCreating) {
-                if (!editId.trim()) { idError = "ID is required."; return; }
-                if (!/^[a-z0-9_]+$/.test(editId)) { idError = "Only lowercase, numbers, and underscores allowed."; return; }
-                const created = await createPrompt({ id: editId.trim(), description: editDescription, content: editContent, version: editVersion || "1.0" });
+                if (!editId.trim()) {
+                    idError = "ID is required.";
+                    return;
+                }
+                if (!/^[a-z0-9_]+$/.test(editId)) {
+                    idError =
+                        "Only lowercase, numbers, and underscores allowed.";
+                    return;
+                }
+                const created = await createPrompt({
+                    id: editId.trim(),
+                    description: editDescription,
+                    content: editContent,
+                    version: editVersion || "1.0",
+                });
                 prompts = [...prompts, created];
                 isCreating = false;
                 selectedId = created.id;
                 selectPrompt(created.id);
                 saveMsg = "Created!";
             } else if (selectedId) {
-                await updatePrompt(selectedId, { content: editContent, version: editVersion });
-                prompts = prompts.map((p) => p.id === selectedId ? { ...p, content: editContent, version: editVersion, description: editDescription } : p);
+                await updatePrompt(selectedId, {
+                    content: editContent,
+                    version: editVersion,
+                });
+                prompts = prompts.map((p) =>
+                    p.id === selectedId
+                        ? {
+                              ...p,
+                              content: editContent,
+                              version: editVersion,
+                              description: editDescription,
+                          }
+                        : p,
+                );
                 saveMsg = "Saved!";
             }
         } catch (e: any) {
@@ -163,17 +193,21 @@
         }
     }
 
-    $: isSystem = !isCreating && !!selectedId && SYSTEM_PROMPT_IDS.has(selectedId ?? "");
+    $: isSystem =
+        !isCreating && !!selectedId && SYSTEM_PROMPT_IDS.has(selectedId ?? "");
     $: currentPrompt = prompts.find((p) => p.id === selectedId);
 </script>
 
 <div class="flex h-full bg-surface overflow-hidden no-drag">
-
     <!-- Left: Navigation Sidebar -->
     <nav class="w-64 bg-surface-container-low p-4 flex flex-col flex-shrink-0">
         <div class="mb-8 px-2">
-            <h2 class="font-headline font-bold text-lg text-primary">Settings</h2>
-            <p class="text-xs text-on-surface-variant mt-0.5">Local Configuration</p>
+            <h2 class="font-headline font-bold text-lg text-primary">
+                Settings
+            </h2>
+            <p class="text-xs text-on-surface-variant mt-0.5">
+                Local Configuration
+            </p>
         </div>
 
         <div class="flex-1 space-y-1">
@@ -181,11 +215,14 @@
                 <button
                     class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all
                            {activeSection === sec.id
-                             ? 'bg-surface-container-lowest text-primary shadow-sm'
-                             : 'text-on-surface-variant hover:bg-surface-container-lowest/60'}"
+                        ? 'bg-surface-container-lowest text-primary shadow-sm'
+                        : 'text-on-surface-variant hover:bg-surface-container-lowest/60'}"
                     on:click={() => (activeSection = sec.id)}
                 >
-                    <span class="material-symbols-outlined" style="font-size:20px; line-height:1">{sec.icon}</span>
+                    <span
+                        class="material-symbols-outlined"
+                        style="font-size:20px; line-height:1">{sec.icon}</span
+                    >
                     {sec.label}
                 </button>
             {/each}
@@ -194,7 +231,9 @@
         {#if activeSection !== "prompts"}
             <div class="mt-auto pt-4 space-y-3">
                 {#if saveMsgVisible}
-                    <div class="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest py-2 px-4 rounded-full text-center">
+                    <div
+                        class="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest py-2 px-4 rounded-full text-center"
+                    >
                         Saved ✓
                     </div>
                 {/if}
@@ -210,7 +249,6 @@
 
     <!-- Right: Content Area -->
     <div class="flex-1 overflow-hidden flex flex-col">
-
         <!-- ══════════════════════════════════════════════════
              Restaurant Profile
         ══════════════════════════════════════════════════ -->
@@ -218,17 +256,37 @@
             <div class="flex-1 overflow-y-auto custom-scrollbar p-10">
                 <div class="max-w-2xl space-y-8">
                     <header>
-                        <span class="text-[10px] font-bold text-primary uppercase tracking-widest">CONFIGURATION</span>
-                        <h1 class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1">Restaurant Profile</h1>
-                        <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">식당의 기본 정보와 앱 동작 설정을 관리합니다.</p>
+                        <span
+                            class="text-[10px] font-bold text-primary uppercase tracking-widest"
+                            >CONFIGURATION</span
+                        >
+                        <h1
+                            class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1"
+                        >
+                            Restaurant Profile
+                        </h1>
+                        <p
+                            class="text-sm text-on-surface-variant mt-1 leading-relaxed"
+                        >
+                            식당의 기본 정보와 앱 동작 설정을 관리합니다.
+                        </p>
                     </header>
 
                     <!-- Identity -->
-                    <div class="bg-surface-container-low rounded-2xl p-8 space-y-5">
-                        <h3 class="text-sm font-bold text-on-surface">기본 정보</h3>
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-8 space-y-5"
+                    >
+                        <h3 class="text-sm font-bold text-on-surface">
+                            기본 정보
+                        </h3>
                         <div class="space-y-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-widest text-outline">식당 이름</label>
+                            <label
+                                for="restaurant-name"
+                                class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                >식당 이름</label
+                            >
                             <input
+                                id="restaurant-name"
                                 type="text"
                                 class="w-full bg-surface-container-lowest rounded-xl py-3.5 px-5 text-lg font-headline font-bold focus:ring-2 focus:ring-primary/20 transition-all outline-none border-none"
                                 bind:value={restaurantName}
@@ -236,8 +294,13 @@
                             />
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-widest text-outline">소개 및 운영 철학</label>
+                            <label
+                                for="restaurant-desc"
+                                class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                >소개 및 운영 철학</label
+                            >
                             <textarea
+                                id="restaurant-desc"
                                 class="w-full bg-surface-container-lowest rounded-xl py-3.5 px-5 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none resize-none border-none custom-scrollbar"
                                 rows="4"
                                 bind:value={restaurantDesc}
@@ -247,10 +310,17 @@
                     </div>
 
                     <!-- Gemini API Key -->
-                    <div class="bg-surface-container-low rounded-2xl p-8 space-y-4">
-                        <h3 class="text-sm font-bold text-on-surface">Gemini API Key</h3>
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-8 space-y-4"
+                    >
+                        <h3 class="text-sm font-bold text-on-surface">
+                            Gemini API Key
+                        </h3>
                         <div class="relative">
-                            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline" style="font-size:20px">key</span>
+                            <span
+                                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline"
+                                style="font-size:20px">key</span
+                            >
                             <input
                                 type="password"
                                 class="w-full bg-surface-container-lowest rounded-xl py-3.5 pl-12 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none font-mono border-none"
@@ -258,23 +328,34 @@
                                 placeholder="Enter your Gemini API key..."
                             />
                         </div>
-                        <p class="text-[11px] text-on-surface-variant leading-relaxed">
-                            Google AI Studio에서 발급받은 키를 입력하세요. 로컬에만 저장됩니다.
+                        <p
+                            class="text-[11px] text-on-surface-variant leading-relaxed"
+                        >
+                            Google AI Studio에서 발급받은 키를 입력하세요.
+                            로컬에만 저장됩니다.
                         </p>
                     </div>
 
                     <!-- System Status Footer -->
-                    <div class="bg-surface-container-low rounded-2xl p-6 flex items-center gap-4">
-                        <div class="w-2 h-2 rounded-full bg-primary animate-pulse flex-shrink-0"></div>
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-6 flex items-center gap-4"
+                    >
+                        <div
+                            class="w-2 h-2 rounded-full bg-primary animate-pulse flex-shrink-0"
+                        ></div>
                         <div class="flex-1 min-w-0">
-                            <div class="text-xs font-bold text-on-surface">System Normal</div>
-                            <div class="text-[10px] text-on-surface-variant">Local database connected · http://127.0.0.1:3737</div>
+                            <div class="text-xs font-bold text-on-surface">
+                                System Normal
+                            </div>
+                            <div class="text-[10px] text-on-surface-variant">
+                                Local database connected · http://127.0.0.1:3737
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-        <!-- ══════════════════════════════════════════════════
+            <!-- ══════════════════════════════════════════════════
              Category Management
         ══════════════════════════════════════════════════ -->
         {:else if activeSection === "categories"}
@@ -282,38 +363,83 @@
                 <div class="max-w-4xl">
                     <header class="mb-10 flex items-end justify-between">
                         <div>
-                            <span class="text-[10px] font-bold text-primary uppercase tracking-widest">CONFIGURATION</span>
-                            <h1 class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1">카테고리 관리</h1>
-                            <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">식단 분류를 위한 카테고리를 관리합니다. 아이콘, 색상 및 사용 여부를 설정할 수 있습니다.</p>
+                            <span
+                                class="text-[10px] font-bold text-primary uppercase tracking-widest"
+                                >CONFIGURATION</span
+                            >
+                            <h1
+                                class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1"
+                            >
+                                카테고리 관리
+                            </h1>
+                            <p
+                                class="text-sm text-on-surface-variant mt-1 leading-relaxed"
+                            >
+                                식단 분류를 위한 카테고리를 관리합니다. 아이콘,
+                                색상 및 사용 여부를 설정할 수 있습니다.
+                            </p>
                         </div>
                         <button
                             class="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-full font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-all text-sm flex-shrink-0 ml-6"
                             on:click={addCategory}
                         >
-                            <span class="material-symbols-outlined" style="font-size:18px">add</span>
+                            <span
+                                class="material-symbols-outlined"
+                                style="font-size:18px">add</span
+                            >
                             새 카테고리 추가
                         </button>
                     </header>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    <div
+                        class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+                    >
                         {#each categories as cat, i (cat.id)}
-                            <div class="bg-surface-container-lowest p-6 rounded-[1.25rem] shadow-sm flex flex-col gap-5 hover:shadow-md transition-all">
+                            <div
+                                class="bg-surface-container-lowest p-6 rounded-[1.25rem] shadow-sm flex flex-col gap-5 hover:shadow-md transition-all"
+                            >
                                 <!-- Top: color icon + edit/delete -->
                                 <div class="flex justify-between items-start">
-                                    <div class="relative w-16 h-16 rounded-2xl flex items-center justify-center cursor-pointer overflow-hidden"
-                                         style="background-color: {cat.color}20">
-                                        <input type="color" bind:value={cat.color}
-                                               class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                        <span class="material-symbols-outlined" style="font-size:28px; color: {cat.color}">palette</span>
+                                    <div
+                                        class="relative w-16 h-16 rounded-2xl flex items-center justify-center cursor-pointer overflow-hidden"
+                                        style="background-color: {cat.color}20"
+                                    >
+                                        <input
+                                            type="color"
+                                            bind:value={cat.color}
+                                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:28px; color: {cat.color}"
+                                            >palette</span
+                                        >
                                     </div>
                                     <div class="flex gap-1">
-                                        <button class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant"
-                                                on:click={() => (editingCatId = editingCatId === cat.id ? null : cat.id)}>
-                                            <span class="material-symbols-outlined" style="font-size:20px">edit</span>
+                                        <button
+                                            class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant"
+                                            on:click={() =>
+                                                (editingCatId =
+                                                    editingCatId === cat.id
+                                                        ? null
+                                                        : cat.id)}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                style="font-size:20px"
+                                                >edit</span
+                                            >
                                         </button>
-                                        <button class="p-2 hover:bg-error-container/30 rounded-lg transition-colors text-on-surface-variant hover:text-error"
-                                                on:click={() => removeCategory(cat.id)}>
-                                            <span class="material-symbols-outlined" style="font-size:20px">delete</span>
+                                        <button
+                                            class="p-2 hover:bg-error-container/30 rounded-lg transition-colors text-on-surface-variant hover:text-error"
+                                            on:click={() =>
+                                                removeCategory(cat.id)}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                style="font-size:20px"
+                                                >delete</span
+                                            >
                                         </button>
                                     </div>
                                 </div>
@@ -325,23 +451,41 @@
                                             type="text"
                                             class="text-xl font-headline font-bold text-on-surface bg-surface-container-low rounded-xl px-3 py-1.5 w-full outline-none border-none focus:ring-2 focus:ring-primary/20"
                                             bind:value={cat.name}
-                                            on:blur={() => (editingCatId = null)}
+                                            on:blur={() =>
+                                                (editingCatId = null)}
                                         />
                                     {:else}
-                                        <h3 class="text-xl font-headline font-bold text-on-surface">{cat.name}</h3>
+                                        <h3
+                                            class="text-xl font-headline font-bold text-on-surface"
+                                        >
+                                            {cat.name}
+                                        </h3>
                                     {/if}
-                                    <span class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded"
-                                          style="color: {cat.color}; background-color: {cat.color}15">
-                                        Linked Menus: {menuCountMap[cat.id] ?? 0}
+                                    <span
+                                        class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded"
+                                        style="color: {cat.color}; background-color: {cat.color}15"
+                                    >
+                                        Linked Menus: {menuCountMap[cat.id] ??
+                                            0}
                                     </span>
                                 </div>
 
                                 <!-- Bottom: color picker button -->
-                                <div class="pt-4 border-t border-surface-container-low mt-auto">
-                                    <label class="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider hover:bg-primary/5 px-3 py-2 rounded-lg transition-colors cursor-pointer w-fit relative">
-                                        <input type="color" bind:value={cat.color}
-                                               class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
-                                        <span class="material-symbols-outlined" style="font-size:16px">palette</span>
+                                <div
+                                    class="pt-4 border-t border-surface-container-low mt-auto"
+                                >
+                                    <label
+                                        class="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider hover:bg-primary/5 px-3 py-2 rounded-lg transition-colors cursor-pointer w-fit relative"
+                                    >
+                                        <input
+                                            type="color"
+                                            bind:value={cat.color}
+                                            class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                                        />
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:16px">palette</span
+                                        >
                                         대표 색상 선택
                                     </label>
                                 </div>
@@ -353,36 +497,52 @@
                             class="bg-surface-container-low border-2 border-dashed border-outline-variant p-6 rounded-[1.25rem] flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-surface-container-high transition-all group min-h-[180px]"
                             on:click={addCategory}
                         >
-                            <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <span class="material-symbols-outlined text-outline" style="font-size:24px">add_circle</span>
+                            <div
+                                class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center group-hover:scale-110 transition-transform"
+                            >
+                                <span
+                                    class="material-symbols-outlined text-outline"
+                                    style="font-size:24px">add_circle</span
+                                >
                             </div>
-                            <span class="text-sm font-bold text-on-surface-variant">새 카테고리 만들기</span>
+                            <span
+                                class="text-sm font-bold text-on-surface-variant"
+                                >새 카테고리 만들기</span
+                            >
                         </button>
                     </div>
                 </div>
             </div>
 
-        <!-- ══════════════════════════════════════════════════
+            <!-- ══════════════════════════════════════════════════
              AI Prompt Management
         ══════════════════════════════════════════════════ -->
         {:else if activeSection === "prompts"}
             <div class="flex-1 overflow-hidden flex flex-col">
-
                 <!-- Top: header + tab bar -->
                 <div class="px-8 pt-8 pb-4 space-y-5 flex-shrink-0">
                     <header>
-                        <span class="text-[10px] font-bold text-primary uppercase tracking-widest">CONFIGURATION</span>
-                        <h1 class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1">AI Prompt Management</h1>
+                        <span
+                            class="text-[10px] font-bold text-primary uppercase tracking-widest"
+                            >CONFIGURATION</span
+                        >
+                        <h1
+                            class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1"
+                        >
+                            AI Prompt Management
+                        </h1>
                     </header>
 
                     <!-- Function Tab Bar -->
-                    <div class="bg-surface-container-low p-1.5 rounded-2xl flex gap-1 flex-wrap shadow-sm border border-outline-variant/20">
+                    <div
+                        class="bg-surface-container-low p-1.5 rounded-2xl flex gap-1 flex-wrap shadow-sm border border-outline-variant/20"
+                    >
                         {#each prompts as p (p.id)}
                             <button
                                 class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all
                                        {selectedId === p.id && !isCreating
-                                         ? 'bg-white text-primary shadow-sm'
-                                         : 'text-on-surface-variant hover:bg-white/50 font-medium'}"
+                                    ? 'bg-white text-primary shadow-sm'
+                                    : 'text-on-surface-variant hover:bg-white/50 font-medium'}"
                                 on:click={() => selectPrompt(p.id)}
                             >
                                 {p.description || p.id}
@@ -390,56 +550,89 @@
                         {/each}
                         <button
                             class="px-4 py-2.5 rounded-xl text-sm font-bold transition-all
-                                   {isCreating ? 'bg-white text-primary shadow-sm' : 'text-on-surface-variant hover:bg-white/50 font-medium'}"
+                                   {isCreating
+                                ? 'bg-white text-primary shadow-sm'
+                                : 'text-on-surface-variant hover:bg-white/50 font-medium'}"
                             on:click={startCreate}
                             title="새 프롬프트 추가"
                         >
-                            <span class="material-symbols-outlined" style="font-size:18px; line-height:1">add</span>
+                            <span
+                                class="material-symbols-outlined"
+                                style="font-size:18px; line-height:1">add</span
+                            >
                         </button>
                     </div>
                 </div>
 
                 <!-- Bottom: editor + history sidebar (flex row) -->
                 <div class="flex-1 overflow-hidden flex">
-
                     <!-- Editor column -->
-                    <div class="flex-1 overflow-y-auto custom-scrollbar px-8 pb-8 space-y-5">
+                    <div
+                        class="flex-1 overflow-y-auto custom-scrollbar px-8 pb-8 space-y-5"
+                    >
                         {#if isCreating || selectedId}
                             <!-- Title row + action buttons -->
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-3">
-                                    <span class="material-symbols-outlined text-primary" style="font-size:22px">edit_note</span>
-                                    <h2 class="font-headline font-bold text-xl text-on-surface">
-                                        {#if isCreating}새 프롬프트 작성{:else}{currentPrompt?.description || selectedId} 편집{/if}
+                                    <span
+                                        class="material-symbols-outlined text-primary"
+                                        style="font-size:22px">edit_note</span
+                                    >
+                                    <h2
+                                        class="font-headline font-bold text-xl text-on-surface"
+                                    >
+                                        {#if isCreating}새 프롬프트 작성{:else}{currentPrompt?.description ||
+                                                selectedId} 편집{/if}
                                     </h2>
                                     {#if isSystem}
-                                        <span class="px-2 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded-full uppercase tracking-tighter">System Core</span>
+                                        <span
+                                            class="px-2 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded-full uppercase tracking-tighter"
+                                            >System Core</span
+                                        >
                                     {/if}
                                 </div>
                                 <div class="flex items-center gap-2">
                                     {#if saveMsg}
-                                        <span class="text-[10px] font-bold text-primary">{saveMsg}</span>
+                                        <span
+                                            class="text-[10px] font-bold text-primary"
+                                            >{saveMsg}</span
+                                        >
                                     {/if}
                                     {#if !isCreating && !isSystem}
-                                        <button class="px-4 py-2 text-error text-xs font-bold uppercase tracking-widest hover:bg-error/10 rounded-xl transition-colors"
-                                                on:click={handleDelete}>Delete</button>
+                                        <button
+                                            class="px-4 py-2 text-error text-xs font-bold uppercase tracking-widest hover:bg-error/10 rounded-xl transition-colors"
+                                            on:click={handleDelete}
+                                            >Delete</button
+                                        >
                                     {/if}
                                     <button
                                         class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all border
                                                {showHistory
-                                                 ? 'bg-surface-container-highest border-outline-variant/50'
-                                                 : 'bg-surface-container-high hover:bg-surface-container-highest border-outline-variant/30'}"
-                                        on:click={() => (showHistory = !showHistory)}
+                                            ? 'bg-surface-container-highest border-outline-variant/50'
+                                            : 'bg-surface-container-high hover:bg-surface-container-highest border-outline-variant/30'}"
+                                        on:click={() =>
+                                            (showHistory = !showHistory)}
                                     >
-                                        <span class="material-symbols-outlined" style="font-size:18px">history</span> History
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:18px">history</span
+                                        > History
                                     </button>
                                     <button
                                         class="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-all disabled:opacity-50"
                                         on:click={handleSave}
-                                        disabled={isSaving || !editContent.trim()}
+                                        disabled={isSaving ||
+                                            !editContent.trim()}
                                     >
-                                        <span class="material-symbols-outlined" style="font-size:18px">save</span>
-                                        {isSaving ? "Saving..." : isCreating ? "Create" : "Save Changes"}
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:18px">save</span
+                                        >
+                                        {isSaving
+                                            ? "Saving..."
+                                            : isCreating
+                                              ? "Create"
+                                              : "Save Changes"}
                                     </button>
                                 </div>
                             </div>
@@ -448,40 +641,82 @@
                             {#if isCreating}
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="space-y-1.5">
-                                        <label class="text-[10px] font-bold uppercase tracking-widest text-outline">Identifier</label>
-                                        <input type="text"
-                                               class="w-full bg-surface-container-low rounded-xl py-3 px-4 text-sm font-mono focus:ring-2 focus:ring-primary/10 outline-none border-none {idError ? 'ring-2 ring-error/20' : ''}"
-                                               bind:value={editId}
-                                               placeholder="예: meal_logic_v2" />
-                                        {#if idError}<p class="text-[10px] text-error font-bold">{idError}</p>{/if}
+                                        <label
+                                            for="prompt-id"
+                                            class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                            >Identifier</label
+                                        >
+                                        <input
+                                            id="prompt-id"
+                                            type="text"
+                                            class="w-full bg-surface-container-low rounded-xl py-3 px-4 text-sm font-mono focus:ring-2 focus:ring-primary/10 outline-none border-none {idError
+                                                ? 'ring-2 ring-error/20'
+                                                : ''}"
+                                            bind:value={editId}
+                                            placeholder="예: meal_logic_v2"
+                                        />
+                                        {#if idError}<p
+                                                class="text-[10px] text-error font-bold"
+                                            >
+                                                {idError}
+                                            </p>{/if}
                                     </div>
                                     <div class="space-y-1.5">
-                                        <label class="text-[10px] font-bold uppercase tracking-widest text-outline">Description (탭 이름)</label>
-                                        <input type="text"
-                                               class="w-full bg-surface-container-low rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/10 outline-none border-none"
-                                               bind:value={editDescription}
-                                               placeholder="예: 메뉴 생성용" />
+                                        <label
+                                            for="prompt-desc"
+                                            class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                            >Description (탭 이름)</label
+                                        >
+                                        <input
+                                            id="prompt-desc"
+                                            type="text"
+                                            class="w-full bg-surface-container-low rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/10 outline-none border-none"
+                                            bind:value={editDescription}
+                                            placeholder="예: 메뉴 생성용"
+                                        />
                                     </div>
                                 </div>
                             {/if}
 
                             <!-- Dark Code Editor -->
-                            <div class="flex flex-col bg-[#1e1e1e] rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl" style="min-height: 420px;">
-                                <div class="bg-zinc-900 px-4 py-2.5 flex items-center justify-between border-b border-zinc-800 flex-shrink-0">
+                            <div
+                                class="flex flex-col bg-[#1e1e1e] rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl"
+                                style="min-height: 420px;"
+                            >
+                                <div
+                                    class="bg-zinc-900 px-4 py-2.5 flex items-center justify-between border-b border-zinc-800 flex-shrink-0"
+                                >
                                     <div class="flex items-center gap-4">
                                         <div class="flex gap-1.5">
-                                            <div class="w-3 h-3 rounded-full bg-red-500/50"></div>
-                                            <div class="w-3 h-3 rounded-full bg-amber-500/50"></div>
-                                            <div class="w-3 h-3 rounded-full bg-emerald-500/50"></div>
+                                            <div
+                                                class="w-3 h-3 rounded-full bg-red-500/50"
+                                            ></div>
+                                            <div
+                                                class="w-3 h-3 rounded-full bg-amber-500/50"
+                                            ></div>
+                                            <div
+                                                class="w-3 h-3 rounded-full bg-emerald-500/50"
+                                            ></div>
                                         </div>
-                                        <span class="text-xs font-mono text-zinc-500 uppercase tracking-widest">system_prompt.md</span>
+                                        <span
+                                            class="text-xs font-mono text-zinc-500 uppercase tracking-widest"
+                                            >system_prompt.md</span
+                                        >
                                     </div>
-                                    <span class="text-[10px] font-mono text-zinc-600">UTF-8 · Markdown</span>
+                                    <span
+                                        class="text-[10px] font-mono text-zinc-600"
+                                        >UTF-8 · Markdown</span
+                                    >
                                 </div>
                                 <div class="flex flex-1 overflow-hidden">
-                                    <div class="w-12 bg-zinc-900/50 border-r border-zinc-800 py-6 flex flex-col items-center text-zinc-600 font-mono text-xs select-none flex-shrink-0 overflow-hidden" style="line-height: 1.625rem">
+                                    <div
+                                        class="w-12 bg-zinc-900/50 border-r border-zinc-800 py-6 flex flex-col items-center text-zinc-600 font-mono text-xs select-none flex-shrink-0 overflow-hidden"
+                                        style="line-height: 1.625rem"
+                                    >
                                         {#each Array(Math.max(lineNumbers, 1)) as _, n}
-                                            <div class="w-full text-center">{n + 1}</div>
+                                            <div class="w-full text-center">
+                                                {n + 1}
+                                            </div>
                                         {/each}
                                     </div>
                                     <textarea
@@ -495,57 +730,122 @@
                             </div>
                         {:else}
                             <!-- Empty state -->
-                            <div class="flex flex-col items-center justify-center py-24 text-center">
-                                <div class="w-20 h-20 rounded-2xl bg-surface-container-low flex items-center justify-center mb-6">
-                                    <span class="material-symbols-outlined text-outline" style="font-size:40px">cognition</span>
+                            <div
+                                class="flex flex-col items-center justify-center py-24 text-center"
+                            >
+                                <div
+                                    class="w-20 h-20 rounded-2xl bg-surface-container-low flex items-center justify-center mb-6"
+                                >
+                                    <span
+                                        class="material-symbols-outlined text-outline"
+                                        style="font-size:40px">cognition</span
+                                    >
                                 </div>
-                                <h3 class="text-xl font-headline font-extrabold text-on-surface mb-2">AI Instruction Engine</h3>
-                                <p class="text-sm text-on-surface-variant max-w-xs mx-auto leading-relaxed mb-6">위 탭에서 프롬프트를 선택하거나 새 프롬프트를 추가하세요.</p>
+                                <h3
+                                    class="text-xl font-headline font-extrabold text-on-surface mb-2"
+                                >
+                                    AI Instruction Engine
+                                </h3>
+                                <p
+                                    class="text-sm text-on-surface-variant max-w-xs mx-auto leading-relaxed mb-6"
+                                >
+                                    위 탭에서 프롬프트를 선택하거나 새
+                                    프롬프트를 추가하세요.
+                                </p>
                             </div>
                         {/if}
                     </div>
 
                     <!-- History Sidebar (right panel, toggleable) -->
                     {#if showHistory && (isCreating || selectedId)}
-                        <aside class="w-72 flex-shrink-0 border-l border-surface-container-high overflow-y-auto custom-scrollbar bg-surface-container-low/50">
+                        <aside
+                            class="w-72 flex-shrink-0 border-l border-surface-container-high overflow-y-auto custom-scrollbar bg-surface-container-low/50"
+                        >
                             <div class="p-6 space-y-4">
                                 <div class="flex items-center justify-between">
-                                    <h3 class="font-headline font-bold text-base text-on-surface">Version History</h3>
-                                    <button class="p-1.5 hover:bg-surface-container-high rounded-lg transition-colors text-on-surface-variant"
-                                            on:click={() => (showHistory = false)}>
-                                        <span class="material-symbols-outlined" style="font-size:18px">close</span>
+                                    <h3
+                                        class="font-headline font-bold text-base text-on-surface"
+                                    >
+                                        Version History
+                                    </h3>
+                                    <button
+                                        class="p-1.5 hover:bg-surface-container-high rounded-lg transition-colors text-on-surface-variant"
+                                        on:click={() => (showHistory = false)}
+                                    >
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:18px">close</span
+                                        >
                                     </button>
                                 </div>
-                                <p class="text-[10px] text-on-surface-variant font-medium">수정 이력 · Click to restore</p>
+                                <p
+                                    class="text-[10px] text-on-surface-variant font-medium"
+                                >
+                                    수정 이력 · Click to restore
+                                </p>
 
                                 <div class="space-y-2 mt-2">
                                     {#if currentPrompt}
-                                        <div class="flex items-start justify-between p-4 bg-white rounded-xl border border-primary/20 cursor-default group hover:border-primary transition-all">
+                                        <div
+                                            class="flex items-start justify-between p-4 bg-white rounded-xl border border-primary/20 cursor-default group hover:border-primary transition-all"
+                                        >
                                             <div class="flex items-start gap-3">
-                                                <div class="p-1.5 bg-primary/10 rounded-lg text-primary flex-shrink-0 mt-0.5">
-                                                    <span class="material-symbols-outlined" style="font-size:16px">history</span>
+                                                <div
+                                                    class="p-1.5 bg-primary/10 rounded-lg text-primary flex-shrink-0 mt-0.5"
+                                                >
+                                                    <span
+                                                        class="material-symbols-outlined"
+                                                        style="font-size:16px"
+                                                        >history</span
+                                                    >
                                                 </div>
                                                 <div>
-                                                    <p class="text-xs font-bold text-on-surface">v{currentPrompt.version} — {currentPrompt.description || currentPrompt.id}</p>
-                                                    <p class="text-[10px] text-on-surface-variant mt-0.5">{SYSTEM_PROMPT_IDS.has(currentPrompt.id) ? 'System Managed' : 'User Defined'} · ID: {currentPrompt.id}</p>
+                                                    <p
+                                                        class="text-xs font-bold text-on-surface"
+                                                    >
+                                                        v{currentPrompt.version}
+                                                        — {currentPrompt.description ||
+                                                            currentPrompt.id}
+                                                    </p>
+                                                    <p
+                                                        class="text-[10px] text-on-surface-variant mt-0.5"
+                                                    >
+                                                        {SYSTEM_PROMPT_IDS.has(
+                                                            currentPrompt.id,
+                                                        )
+                                                            ? "System Managed"
+                                                            : "User Defined"} · ID:
+                                                        {currentPrompt.id}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <span class="text-[10px] font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">CURRENT</span>
+                                            <span
+                                                class="text-[10px] font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2"
+                                                >CURRENT</span
+                                            >
                                         </div>
                                     {:else}
-                                        <p class="text-sm text-on-surface-variant text-center py-8">No history available.</p>
+                                        <p
+                                            class="text-sm text-on-surface-variant text-center py-8"
+                                        >
+                                            No history available.
+                                        </p>
                                     {/if}
                                 </div>
 
-                                <div class="pt-4 border-t border-surface-container-high">
-                                    <p class="text-[10px] text-on-surface-variant leading-relaxed">
-                                        전체 버전 이력 추적 기능은 향후 업데이트에서 제공될 예정입니다.
+                                <div
+                                    class="pt-4 border-t border-surface-container-high"
+                                >
+                                    <p
+                                        class="text-[10px] text-on-surface-variant leading-relaxed"
+                                    >
+                                        전체 버전 이력 추적 기능은 향후
+                                        업데이트에서 제공될 예정입니다.
                                     </p>
                                 </div>
                             </div>
                         </aside>
                     {/if}
-
                 </div>
             </div>
         {/if}
@@ -557,7 +857,13 @@
         animation: animate-in 0.3s ease-out;
     }
     @keyframes animate-in {
-        from { opacity: 0; transform: translateY(8px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 </style>

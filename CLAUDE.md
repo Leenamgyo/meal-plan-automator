@@ -31,14 +31,18 @@ There are no lint or test commands configured in this project.
 
 ## CLAUDE.md 업데이트 규칙
 
-다음에 해당하는 변경이 생기면 **즉시 이 파일을 업데이트**한다:
+**모든 기능 구현 완료 후**, 아래 체크리스트를 확인하고 해당하는 항목이 있으면 **즉시 이 파일을 업데이트**한다:
 
-- 디렉토리 구조 또는 파일 위치 변경 (이동, 신규, 삭제)
-- 새 서비스 / 유틸 / 스토어 추가
-- import 규칙 변경 (어떤 모듈에서 무엇을 가져와야 하는지)
-- 아키텍처 레이어 책임 변경 (예: 도메인 로직이 다른 파일로 이동)
-- 탭 컴포넌트 추가 / 제거
-- 환경변수 또는 빌드 프로세스 변경
+- [ ] 디렉토리 구조 또는 파일 위치 변경 (이동, 신규, 삭제)
+- [ ] 새 서비스 / 유틸 / 스토어 추가
+- [ ] import 규칙 변경 (어떤 모듈에서 무엇을 가져와야 하는지)
+- [ ] 아키텍처 레이어 책임 변경 (예: 도메인 로직이 다른 파일로 이동)
+- [ ] 탭 컴포넌트 추가 / 제거
+- [ ] 환경변수 또는 빌드 프로세스 변경
+- [ ] `Frontend Source Structure` 섹션의 파일 목록이 실제와 일치하는지 확인
+- [ ] `SQLite Schema` 섹션이 실제 테이블 구조와 일치하는지 확인
+
+> **원칙:** 코드를 고쳤으면, CLAUDE.md도 같이 고친다. PR 반영 전 CLAUDE.md가 최신 상태인지 항상 검증한다.
 
 ---
 
@@ -198,6 +202,7 @@ src/lib/
 │   ├── menuItems.ts      # MenuItem CRUD + localStorage 폴백
 │   ├── mealData.ts       # MealData CRUD + localStorage 폴백
 │   ├── prompts.ts        # Prompt CRUD + localStorage 폴백
+│   ├── combos.ts         # Combo CRUD (fetchCombos, createCombo, updateCombo, deleteCombo)
 │   ├── gemini.ts         # 순수 Gemini API 클라이언트 (callGeminiText)
 │   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, convertMealText)
 │   └── mealGeneration.ts # AI 추천 순수 함수 (점수 계산, 프롬프트 빌드)
@@ -206,12 +211,13 @@ src/lib/
 │   ├── calendarUtils.ts  # 달력 날짜 계산 (buildCalendarDays, dateKey, isToday)
 │   └── arrayUtils.ts     # 배열 순서 변경 (moveItemUp, moveItemDown, swapItems)
 ├── stores/
-│   └── index.ts          # geminiKey, toastMessage, confirmDialog writable stores + showSuccess(), showConfirm() helpers
+│   └── index.ts          # geminiKey, aiIngredientsEnabled, toastMessage, confirmDialog writable stores + showSuccess(), showConfirm() helpers
 └── components/
     ├── CalendarTab.svelte     # Planner Module (PLN)
     ├── MenuTab.svelte         # Inventory Module (INV)
     ├── SettingsTab.svelte     # Settings Module (SET)
-    ├── StatsTab.svelte        # (unused — kept for reference)
+    ├── StatsTab.svelte        # (레거시 — +page.svelte에서 사용하지 않음, Analytics 참고용)
+    ├── ChatTab.svelte         # (레거시 — +page.svelte에서 사용하지 않음, 채팅 참고용)
     ├── AlertSuccess.svelte    # COM-001: 우상단 toast 알림 (전역)
     ├── AlertConfirm.svelte    # COM-002: 삭제 확인 다이얼로그 (전역)
     ├── ModalNewEntrySelection.svelte  # INV-004: 단품/콤보 선택 모달
