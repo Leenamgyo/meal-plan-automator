@@ -204,7 +204,7 @@ src/lib/
 │   ├── prompts.ts        # Prompt CRUD + localStorage 폴백
 │   ├── combos.ts         # Combo CRUD (fetchCombos, createCombo, updateCombo, deleteCombo)
 │   ├── gemini.ts         # 순수 Gemini API 클라이언트 (callGeminiText)
-│   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, convertMealText)
+│   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, recommendMenus, suggestCombos, suggestIngredients)
 │   └── mealGeneration.ts # AI 추천 순수 함수 (점수 계산, 프롬프트 빌드)
 ├── utils/
 │   ├── hangul.ts         # 한글 초성 검색 (hangulIncludes)
@@ -240,7 +240,7 @@ src/lib/
 | `categories` | `id`, `name`, `color`, `sort_order` | Menu categories |
 | `menu_items` | `id`, `name`, `category_id`, `ingredients` (JSON array) | FK → categories (SET NULL on delete) |
 | `meal_data` | `date` (UNIQUE), `menus` (JSON array of MealEntry objects) | Upsert on conflict. MealEntry = `{ name, category_id, color }`. Old string[] data is normalized on fetch. |
-| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | Gemini prompt templates, seeded at startup |
+| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | AI 프롬프트 (코드에서 항상 갱신). IDs: `chat_base`, `ingredient_suggest`, `auto_gen`, `menu_recommend`, `combo_suggest` |
 | `combos` | `id`, `name`, `description`, `is_active` | 콤보 메뉴 |
 | `combo_items` | `combo_id`, `menu_item_id` (PK 복합) | 콤보↔단품 매핑, CASCADE DELETE |
 
@@ -250,23 +250,52 @@ Single-page app with tab-based navigation in `src/routes/+page.svelte`. The acti
 
 | Tab id | Component | Purpose |
 |---|---|---|
-| `planner` | `CalendarTab.svelte` | Planner Module: 월간 캘린더 + 큐레이션 패널 (더블클릭 배정/삭제, AI Recommend 탭) |
-| `inventory` | `MenuTab.svelte` | Inventory Module: 단품+콤보 통합 관리, 3종 등록 모달 플로우 |
-| `settings` | `SettingsTab.svelte` | Settings Module: API 키, 카테고리, AI 프롬프트 관리 |
+| `planner` | `CalendarTab.svelte` | Planner Module: 월간 캘린더 + 큐레이션 패널 (더블클릭 배정/삭제, AI 추천 콤보 모달) |
+| `inventory` | `MenuTab.svelte` | Inventory Module: 단품+콤보 통합 관리, 3종 등록 모달 + 콤보 편집 모달, 사용/비사용 필터 |
+| `settings` | `SettingsTab.svelte` | Settings Module: API 키, 카테고리 관리, AI 추천 콤보 수 설정 |
 
 **Planner 인터랙션:**
 - 날짜 단일클릭 → 선택 + 패널 열기
 - 패널 메뉴 더블클릭 → 선택 날짜에 즉시 배정
 - 캘린더 셀 메뉴 태그 더블클릭 → 즉시 삭제
 - Panel 토글 버튼 or 우측 chevron → 패널 접기/펼치기
+- 패널 하단 "AI 추천" 버튼 → AI 추천 콤보 모달 (날짜 선택 필수)
+
+**AI 추천 콤보 모달 구조 (CalendarTab):**
+- 헤더: "AI 추천 콤보" + 오늘 날짜 pill + 닫기
+- 3주 이력 dot-grid: 7열 × 3행, 각 날짜에 카테고리 색상 dot 표시. 오늘 강조. hover tooltip으로 식단명 확인.
+- 옵션 카드 2열 그리드: 제목·설명·메뉴 태그. 클릭으로 선택.
+- 액션바: "날짜 배정" + "콤보 등록". 등록된 옵션은 "등록됨" 뱃지 + 버튼 비활성, 모달 유지.
+- 동일 메뉴 구성 콤보 중복 등록 방지 (`hasDuplicateComposition()`)
+
+**Inventory 주요 동작:**
+- 메뉴 카드: 비활성 시 "비활성" 오버레이 표시 (이미지 영역)
+- 콤보 카드: 비활성 아이템 포함 시 "비활성 포함" 빨간 뱃지 + opacity-60 + 해당 태그 line-through
+- 콤보 카드: 구성 메뉴 전체 표시 (slice/+N 없음)
+- edit·delete 버튼: 모든 카드 우측 상단에 그룹으로 hover 시 표시
+- 사용/비사용 필터: `activeFilter` ("all"/"active"/"inactive") — select 드롭다운
+- 기본 밀도: XS (density=1). SM(density=2)까지만. 더 큰 사이즈 제거.
 
 > `PromptsTab.svelte` deleted (functionality merged into SettingsTab).
 
 ### Gemini AI Integration
 
+3가지 AI 기능 + 보조 기능으로 구성:
+
+| 기능 | 진입점 | 서비스 함수 | 프롬프트 ID |
+|---|---|---|---|
+| **AI 추천 콤보** (N가지 콤보 후보) | CalendarTab → AI 추천 버튼 | `askGemini()` | `auto_gen` |
+| **메뉴 추천** (단품 추천) | MenuTab → AI 메뉴 추천 버튼 (예정) | `recommendMenus()` | `menu_recommend` |
+| **콤보 추천** (콤보 구성) | MenuTab → AI 콤보 추천 버튼 (예정) | `suggestCombos()` | `combo_suggest` |
+| 재료 자동 추천 (보조) | ModalMenuRegistry | `suggestIngredients()` | `ingredient_suggest` |
+
 - `gemini.ts` — `callGeminiText(prompt, systemInstruction, apiKey)`: 순수 API 호출, 도메인 지식 없음
-- `mealService.ts` — `askGemini()`, `convertMealText()`: DB 프롬프트 조회 + 메뉴 제약 주입
+- `mealService.ts` — AI 기능별 서비스 함수 (위 표 참조)
 - `mealGeneration.ts` — 날짜 창 계산, 점수 산출, 프롬프트 문자열 생성, 응답 파싱
+
+**`auto_gen` 프롬프트 플레이스홀더:** `{count}` (설정값), `{availableMenusText}`, `{existingCombosText}`, `{recentMealsText}`. 출력 형식: `[콤보N]` 블록 (제목/설명/메뉴 라인). `aiRecommendCount` localStorage key (default 5, range 3–12).
+
+**프롬프트 관리:** `main.cjs` 시드에서 코드로 직접 관리 (항상 최신 버전으로 갱신). 사용자 편집 UI 없음.
 
 `geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$geminiKey`)만 사용.
 

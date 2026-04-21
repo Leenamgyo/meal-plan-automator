@@ -3,7 +3,7 @@
     import { hangulIncludes } from "$lib/utils/hangul";
     import { fetchCategories } from "$lib/services/categories";
     import { fetchMenuItems, updateMenuItem, deleteMenuItem } from "$lib/services/menuItems";
-    import { fetchCombos, deleteCombo } from "$lib/services/combos";
+    import { fetchCombos, deleteCombo, updateCombo } from "$lib/services/combos";
     import type { Category, MenuItem, Combo } from "$lib/types/models";
     import { showSuccess, showConfirm } from "$lib/stores";
 
@@ -17,7 +17,8 @@
     let searchInput = "";
     let activeCategoryFilter: number | null = null;
     let showComboOnly = false;
-    let density = 3;
+    let density = 1;
+    let activeFilter: "all" | "active" | "inactive" = "all";
 
     // inactive set — localStorage persisted
     let inactiveIds = new Set<number>();
@@ -27,18 +28,28 @@
     let showMenuModal = false;
     let showComboModal = false;
 
-    // Edit modal
+    // Menu edit modal
     let editingId: number | null = null;
     let editName = "";
     let editCategory: number | null = null;
     let editIngredientInput = "";
     let editIngredients: string[] = [];
 
+    // Combo edit modal
+    let editingComboId: number | null = null;
+    let editComboName = "";
+    let editComboDesc = "";
+    let editComboItemIds: number[] = [];
+    let comboItemSearch = "";
+
     // ── Derived ───────────────────────────────────────────────
     $: activeCount = menuItems.filter((m) => !inactiveIds.has(m.id)).length;
 
     $: filteredItems = menuItems.filter((item) => {
         if (showComboOnly) return false;
+        const isActive = !inactiveIds.has(item.id);
+        if (activeFilter === "active" && !isActive) return false;
+        if (activeFilter === "inactive" && isActive) return false;
         const catName = categories.find((c) => c.id === item.category_id)?.name || "";
         const matchSearch =
             !searchInput ||
@@ -57,10 +68,8 @@
 
     $: gridClass =
         density === 1
-            ? "grid-cols-2 lg:grid-cols-4 gap-4"
-            : density === 2
-            ? "grid-cols-2 lg:grid-cols-3 gap-5"
-            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8";
+            ? "grid-cols-3 lg:grid-cols-5 gap-2"
+            : "grid-cols-2 lg:grid-cols-4 gap-4";
 
     // ── Mount ─────────────────────────────────────────────────
     onMount(async () => {
@@ -148,6 +157,45 @@
         editingId = null;
         showSuccess("수정 완료");
     }
+
+    // ── Combo Edit ────────────────────────────────────────────
+    function startEditCombo(combo: Combo) {
+        editingComboId = combo.id;
+        editComboName = combo.name;
+        editComboDesc = combo.description ?? "";
+        editComboItemIds = (combo.items ?? []).map((i) => i.id);
+        comboItemSearch = "";
+    }
+    function cancelEditCombo() { editingComboId = null; }
+    function toggleComboItem(id: number) {
+        editComboItemIds = editComboItemIds.includes(id)
+            ? editComboItemIds.filter((x) => x !== id)
+            : [...editComboItemIds, id];
+    }
+    async function saveEditCombo() {
+        if (!editingComboId || !editComboName.trim()) return;
+        const ok = await updateCombo(editingComboId, {
+            name: editComboName.trim(),
+            description: editComboDesc.trim(),
+            item_ids: editComboItemIds,
+        });
+        if (ok) {
+            combos = combos.map((c) =>
+                c.id === editingComboId
+                    ? {
+                          ...c,
+                          name: editComboName.trim(),
+                          description: editComboDesc.trim(),
+                          items: menuItems.filter((m) =>
+                              editComboItemIds.includes(m.id),
+                          ),
+                      }
+                    : c,
+            );
+            editingComboId = null;
+            showSuccess("콤보 수정 완료");
+        }
+    }
 </script>
 
 <div class="flex flex-col h-full overflow-hidden bg-surface no-drag">
@@ -199,16 +247,25 @@
                             bind:value={searchInput}
                         />
                     </div>
+                    <!-- Active filter dropdown -->
+                    <select
+                        bind:value={activeFilter}
+                        class="bg-surface-container-low px-3 py-2.5 rounded-xl text-sm font-semibold text-on-surface-variant outline-none cursor-pointer hover:bg-surface-container-high transition-colors"
+                    >
+                        <option value="all">전체</option>
+                        <option value="active">사용</option>
+                        <option value="inactive">비사용</option>
+                    </select>
                     <!-- Density -->
                     <div class="flex items-center gap-3 bg-surface-container-low px-4 py-2.5 rounded-xl">
                         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">grid_view</span>
                         <input
-                            type="range" min="1" max="3" step="1"
+                            type="range" min="1" max="2" step="1"
                             bind:value={density}
-                            class="w-20 h-1.5 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary"
+                            class="w-16 h-1.5 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary"
                         />
                         <span class="text-[10px] font-black text-on-surface-variant w-6">
-                            {density === 1 ? "SM" : density === 2 ? "MD" : "LG"}
+                            {density === 1 ? "XS" : "SM"}
                         </span>
                     </div>
                 </div>
@@ -259,39 +316,48 @@
                 <!-- Combo cards -->
                 {#if !activeCategoryFilter}
                     {#each filteredCombos as combo (combo.id)}
-                        <div class="bg-surface-container-lowest rounded-2xl shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col">
+                        {@const hasInactive = combo.items.some(i => inactiveIds.has(i.id))}
+                        <div class="bg-surface-container-lowest rounded-2xl shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col {hasInactive ? 'opacity-60' : ''}">
                             <div class="relative flex items-center justify-center overflow-hidden"
                                  style="aspect-ratio:4/3; background: linear-gradient(135deg, #13696420 0%, #13696408 100%)">
-                                <span class="material-symbols-outlined" style="font-size:{density === 1 ? '40' : '56'}px; color:#13696440">restaurant_menu</span>
-                                <!-- COMBO badge -->
-                                <div class="absolute top-3 left-3 px-2 py-0.5 bg-secondary text-white text-[9px] font-black uppercase rounded-full tracking-widest">
-                                    COMBO
+                                <span class="material-symbols-outlined" style="font-size:{density === 1 ? '28' : '40'}px; color:#13696440">restaurant_menu</span>
+                                <!-- COMBO / 비활성 badge -->
+                                <div class="absolute top-3 left-3 flex gap-1">
+                                    <div class="px-2 py-0.5 bg-secondary text-white text-[9px] font-black uppercase rounded-full tracking-widest">COMBO</div>
+                                    {#if hasInactive}
+                                        <div class="px-2 py-0.5 bg-error text-white text-[9px] font-black uppercase rounded-full tracking-widest">비활성 포함</div>
+                                    {/if}
                                 </div>
-                                <button
-                                    class="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
-                                    on:click={() => removeCombo(combo.id)}
-                                    title="삭제"
-                                >
-                                    <span class="material-symbols-outlined" style="font-size:18px">delete</span>
-                                </button>
+                                <div class="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        class="p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-xl transition-colors"
+                                        on:click={() => startEditCombo(combo)}
+                                        title="편집"
+                                    >
+                                        <span class="material-symbols-outlined" style="font-size:18px">edit</span>
+                                    </button>
+                                    <button
+                                        class="p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-xl transition-colors"
+                                        on:click={() => removeCombo(combo.id)}
+                                        title="삭제"
+                                    >
+                                        <span class="material-symbols-outlined" style="font-size:18px">delete</span>
+                                    </button>
+                                </div>
                             </div>
                             <div class="p-5 flex flex-col flex-1">
-                                <h3 class="font-headline font-bold text-on-surface mb-1 {density === 1 ? 'text-base' : 'text-lg'}">{combo.name}</h3>
+                                <h3 class="font-headline font-bold text-on-surface mb-1 {density === 1 ? 'text-xs' : 'text-base'}">{combo.name}</h3>
                                 {#if combo.description}
                                     <p class="text-sm text-on-surface-variant mb-2">{combo.description}</p>
                                 {/if}
                                 <div class="flex flex-wrap gap-1 mt-auto">
-                                    {#each combo.items.slice(0, 4) as item}
-                                        <span class="px-2 py-0.5 text-[9px] font-bold rounded-md"
+                                    {#each combo.items as item}
+                                        {@const itemInactive = inactiveIds.has(item.id)}
+                                        <span class="px-2 py-0.5 text-[9px] font-bold rounded-md {itemInactive ? 'line-through opacity-50' : ''}"
                                               style="background-color:{getCategoryColor(item.category_id)}15; color:{getCategoryColor(item.category_id)}">
                                             {item.name}
                                         </span>
                                     {/each}
-                                    {#if combo.items.length > 4}
-                                        <span class="px-2 py-0.5 text-[9px] font-bold rounded-md bg-surface-container-low text-on-surface-variant">
-                                            +{combo.items.length - 4}
-                                        </span>
-                                    {/if}
                                 </div>
                             </div>
                         </div>
@@ -302,28 +368,35 @@
                 {#each filteredItems as item (item.id)}
                     {@const color = getCategoryColor(item.category_id)}
                     {@const isActive = !inactiveIds.has(item.id)}
-                    <div class="bg-surface-container-lowest rounded-2xl shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col {!isActive ? 'opacity-70' : ''}">
+                    <div class="bg-surface-container-lowest rounded-2xl shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col">
                         <div class="relative flex items-center justify-center overflow-hidden"
-                             style="aspect-ratio:4/3; background: linear-gradient(135deg, {color}30 0%, {color}10 100%)">
-                            <span class="material-symbols-outlined" style="font-size:{density === 1 ? '40' : '56'}px; color:{color}60">restaurant</span>
-                            <button
-                                class="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
-                                on:click={() => removeMenu(item.id)}
-                                title="삭제"
-                            >
-                                <span class="material-symbols-outlined" style="font-size:18px">delete</span>
-                            </button>
-                            <button
-                                class="absolute top-3 left-3 p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
-                                on:click={() => startEdit(item)}
-                                title="편집"
-                            >
-                                <span class="material-symbols-outlined" style="font-size:18px">edit</span>
-                            </button>
+                             style="aspect-ratio:4/3; background: linear-gradient(135deg, {color}{isActive ? '30' : '18'} 0%, {color}{isActive ? '10' : '06'} 100%)">
+                            <span class="material-symbols-outlined" style="font-size:{density === 1 ? '28' : '40'}px; color:{color}{isActive ? '60' : '30'}">restaurant</span>
+                            {#if !isActive}
+                                <div class="absolute inset-0 bg-surface-container-lowest/50 flex items-center justify-center">
+                                    <span class="px-2 py-0.5 bg-on-surface-variant/20 text-on-surface-variant text-[9px] font-black uppercase rounded-full tracking-widest">비활성</span>
+                                </div>
+                            {/if}
+                            <div class="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    class="p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-xl transition-colors"
+                                    on:click={() => startEdit(item)}
+                                    title="편집"
+                                >
+                                    <span class="material-symbols-outlined" style="font-size:18px">edit</span>
+                                </button>
+                                <button
+                                    class="p-2 bg-white/90 backdrop-blur shadow-sm text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-xl transition-colors"
+                                    on:click={() => removeMenu(item.id)}
+                                    title="삭제"
+                                >
+                                    <span class="material-symbols-outlined" style="font-size:18px">delete</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="p-5 flex flex-col flex-1">
                             <div class="mb-3 flex-1">
-                                <h3 class="font-headline font-bold text-on-surface mb-1 leading-tight {density === 1 ? 'text-base' : 'text-lg'}">{item.name}</h3>
+                                <h3 class="font-headline font-bold text-on-surface mb-1 leading-tight {density === 1 ? 'text-xs' : 'text-base'}">{item.name}</h3>
                                 {#if item.ingredients && item.ingredients.length > 0}
                                     <p class="text-sm text-on-surface-variant line-clamp-2">{item.ingredients.join(", ")}</p>
                                 {/if}
@@ -451,6 +524,97 @@
                         저장
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Combo Edit Modal -->
+{#if editingComboId !== null}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="fixed inset-0 bg-on-surface/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+         on:click={cancelEditCombo}>
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div class="bg-surface-container-lowest rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+             style="max-height: 85vh"
+             on:click|stopPropagation>
+            <div class="p-8 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-2xl font-headline font-extrabold tracking-tight text-on-surface">콤보 편집</h2>
+                    <button class="p-2 hover:bg-surface-container-low rounded-full transition-colors" on:click={cancelEditCombo}>
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <!-- Name -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-outline">콤보 이름</span>
+                    <input type="text"
+                           class="w-full bg-surface-container-low rounded-xl py-3 px-4 text-sm outline-none border-none focus:ring-2 focus:ring-primary/10 transition-all"
+                           bind:value={editComboName} />
+                </div>
+
+                <!-- Description -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-outline">설명</span>
+                    <textarea
+                        class="w-full bg-surface-container-low rounded-xl py-3 px-4 text-sm outline-none border-none focus:ring-2 focus:ring-primary/10 transition-all resize-none"
+                        rows="2"
+                        bind:value={editComboDesc}
+                        placeholder="콤보 설명 (선택)"
+                    ></textarea>
+                </div>
+
+                <!-- Item selection -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-outline">구성 메뉴</span>
+                        <span class="text-xs font-bold text-primary">{editComboItemIds.length}개 선택됨</span>
+                    </div>
+                    <input type="text"
+                           class="w-full bg-surface-container-low rounded-xl py-2.5 px-4 text-sm outline-none border-none focus:ring-2 focus:ring-primary/10 transition-all"
+                           placeholder="메뉴 검색..."
+                           bind:value={comboItemSearch} />
+                    <div class="max-h-52 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                        {#each categories as cat}
+                            {@const catItems = menuItems.filter(m =>
+                                m.category_id === cat.id &&
+                                (!comboItemSearch || m.name.includes(comboItemSearch))
+                            )}
+                            {#if catItems.length > 0}
+                                <div class="mb-2">
+                                    <p class="text-[10px] font-black uppercase tracking-widest px-1 mb-1"
+                                       style="color: {cat.color}">{cat.name}</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {#each catItems as item}
+                                            {@const selected = editComboItemIds.includes(item.id)}
+                                            <button
+                                                class="px-3 py-1 rounded-full text-xs font-bold transition-all border-2"
+                                                style={selected
+                                                    ? `background-color:${cat.color}; color:white; border-color:${cat.color}`
+                                                    : `background-color:${cat.color}15; color:${cat.color}; border-color:transparent`}
+                                                on:click={() => toggleComboItem(item.id)}
+                                            >{item.name}</button>
+                                        {/each}
+                                    </div>
+                                </div>
+                            {/if}
+                        {/each}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3 p-6 pt-0 flex-shrink-0">
+                <button class="flex-1 py-3.5 bg-surface-container-low text-on-surface-variant font-bold rounded-2xl hover:bg-surface-container-high transition-all text-sm"
+                        on:click={cancelEditCombo}>취소</button>
+                <button class="flex-[2] py-3.5 bg-primary text-white font-bold rounded-2xl shadow-md shadow-primary/20 hover:opacity-90 transition-all text-sm flex items-center justify-center gap-2"
+                        on:click={saveEditCombo}
+                        disabled={!editComboName.trim() || editComboItemIds.length === 0}>
+                    <span class="material-symbols-outlined" style="font-size:18px">save</span>
+                    저장
+                </button>
             </div>
         </div>
     </div>

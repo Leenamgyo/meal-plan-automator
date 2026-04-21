@@ -65,61 +65,85 @@ function initDatabase() {
     );
   `);
 
-  // 프롬프트 초기 시드 추가
+  // ── AI 기능별 프롬프트 시드 ──────────────────────────────
+  // 3가지 AI 기능: PLAN NOW (auto_gen) / 메뉴 추천 (menu_recommend) / 콤보 추천 (combo_suggest)
+  // + 재료 자동 추천 (ingredient_suggest) — 단품 등록 모달에서 사용
+  // 프롬프트 관리 UI 제거로 모든 프롬프트는 코드에서 직접 관리 (항상 최신 버전으로 갱신)
   const seedPrompts = [
     {
-      id: "json_parser",
-      description: "기초 식단 분석용 JSON 프롬프트 (전체 문자열 분석)",
-      content: `당신은 식단 분석 및 데이터 정형화 전문가입니다.
-사용자가 제공하는 자유로운 텍스트 형식의 식단표를 분석하여 아래의 구조화된 JSON 데이터 포맷으로만 응답해야 합니다. 
-다른 설명이나 마크다운 백틱(\`\`\`json ... \`\`\`) 없이 순수 JSON 배열 객체만 반환하세요.
-
-[JSON 출력 형식 예시]
-[
-  {
-    "date": "2024-03-01",
-    "day": "금요일",
-    "meals": {
-      "breakfast": ["현미밥", "미역국", "계란말이", "김치"],
-      "lunch": ["잡곡밥", "제육볶음", "상추쌈", "된장찌개"],
-      "dinner": ["닭가슴살 샐러드", "고구마 1개", "아몬드 브리즈"]
-    }
-  }
-]
-
-명시되지 않은 식사 시간(예: 아침이 없는 경우)에는 빈 배열 "[]"을 할당하세요.`
-    },
-    {
       id: "chat_base",
-      description: "일반 식단 채팅용 베이스 프롬프트",
-      content: "당신은 사용자의 식단을 분석하고 추천해주는 다정한 AI 비서입니다."
+      description: "AI 기능 공통 시스템 지시문",
+      content: "당신은 구내식당 식단 전문가입니다. 주어진 규칙과 데이터를 정확히 따라 요청한 형식으로만 응답하세요."
     },
     {
       id: "ingredient_suggest",
-      description: "메뉴 이름으로 재료 자동 추천 프롬프트",
+      description: "단품 메뉴 등록 시 재료 자동 추천 (ModalMenuRegistry)",
       content: "당신은 요리 전문가입니다. 메뉴 이름을 받으면 해당 요리의 주요 재료를 한국어로 나열합니다. 재료 이름만 쉼표로 구분하여 한 줄로 응답하세요. 다른 설명은 하지 마세요."
     },
     {
+      // ── Feature 1: PLAN NOW ──────────────────────────────
+      // 달력에서 날짜 선택 후 "Plan Now" 버튼 클릭 → 하루 식단 전체 자동 구성
+      // CalendarTab.svelte: autoGenerateMeal() → askGemini(promptContextStr, ...)
+      // 플레이스홀더: {frequencyData}, {availableMenusText}, {recentMealsText}
       id: "auto_gen",
-      description: "달력 단일 일자 식단 8메뉴 자동 구성 프롬프트 (점수표 기반 중복 회피)",
-      content: `당신은 구내식당 영양사입니다. 아래 규칙을 **반드시** 지키면서 점심 식단(총 8가지)을 구성하세요.
+      description: "AI 콤보 추천 — {count}가지 다양한 콤보 후보 제안 (기존 콤보 중복 금지)",
+      content: `당신은 구내식당 식단 기획자입니다. 아래 메뉴 목록에서 서로 다른 {count}가지 콤보 식단을 제안해주세요.
 
-## 카테고리별 구성 규칙
+## 가용한 메뉴 목록 (카테고리별)
+{availableMenusText}
+
+## 기존 등록된 콤보 (이 조합과 중복되면 안 됩니다)
+{existingCombosText}
+
+## 직전 7일 식단 이력 (맥락 참고 — 자주 나온 메뉴는 피하세요)
+{recentMealsText}
+
+## 콤보 구성 규칙
+- 각 콤보는 반드시 **9개** 메뉴로 구성하세요 (밥 1 + 국/찌개 1 + 주메뉴 1~2 + 부메뉴 2~3 + 밑반찬 1~2 + 김치 1)
+- {count}가지 콤보가 서로 최대한 다르게 구성되어야 합니다
+- 기존 등록된 콤보와 동일하거나 매우 유사한 조합은 사용하지 마세요
+- 위 "가용한 메뉴 목록"에 **정확히 존재하는 이름**만 사용하세요. 한 글자라도 다르면 안 됩니다
+
+## 출력 형식 (반드시 준수, 다른 설명 없이)
+[콤보1]
+제목: [특징을 담은 짧은 제목, 12자 이내]
+설명: [콤보 설명 한 줄, 40자 이내]
+메뉴: 메뉴1, 메뉴2, 메뉴3, 메뉴4
+
+[콤보2]
+제목: ...
+설명: ...
+메뉴: ...
+
+## 출력 예시
+[콤보1]
+제목: 든든한 한식 정식
+설명: 단백질과 채소가 균형 잡힌 든든한 점심입니다.
+메뉴: 쌀밥, 된장찌개, 제육볶음, 콩나물무침, 시금치나물, 멸치볶음, 계란말이, 깍두기, 배추김치
+
+[콤보2]
+제목: 가벼운 채식 런치
+설명: 신선한 채소와 두부로 구성된 건강한 점심입니다.
+메뉴: 잡곡밥, 미소국, 두부조림, 호박볶음, 무생채, 콩자반, 계란후라이, 배추김치, 깍두기`
+    },
+    {
+      // ── Feature 1-B: AI 추천 3가지 선택 ─────────────────
+      // 캘린더 빈 날 "AI 추천" 클릭 → 3가지 완성 식단 옵션 제공 → 사용자가 선택
+      // CalendarTab.svelte: autoGenerateMealOptions() → 플레이스홀더 동일
+      id: "day_plan_options",
+      description: "AI 추천 선택형 — 하루 식단 후보 3가지 제안, 사용자가 1가지 선택",
+      content: `당신은 구내식당 영양사입니다. 오늘 점심 식단 후보 3가지를 제안해주세요.
+
+## 카테고리별 구성 규칙 (각 옵션 동일 적용)
 - 밥 카테고리: 1개
 - 국/찌개 카테고리: 1개
 - 주메뉴 카테고리: 1~2개
 - 부메뉴 카테고리: 2~3개
 - 밑반찬 카테고리: 2~3개
 - 김치/기타 카테고리: 1개
-※ 총합이 반드시 8개가 되어야 합니다. 주메뉴·부메뉴·밑반찬 개수로 조절하세요.
+※ 총합이 반드시 8개. 3가지 옵션이 서로 최대한 다르게 구성하세요.
 
-## 메뉴 추천 점수 활용 (매우 중요!)
-아래 점수표는 이 날짜 기준 ±30일 내 데이터를 분석한 결과입니다 (0~100점).
-- **점수가 높은 메뉴를 우선 선택**하세요.
-- 점수가 낮을수록 인근 날짜에 자주 나온 메뉴이므로 피해주세요.
-- 0점 메뉴는 절대 선택하지 마세요.
-- 같은 점수라면 ±일수가 더 큰 (오래된) 메뉴를 고르세요.
-
+## 메뉴 추천 점수
 {frequencyData}
 
 ## 가용한 메뉴 목록 (카테고리별)
@@ -129,31 +153,76 @@ function initDatabase() {
 {recentMealsText}
 
 ## 절대 규칙
-1. 위 "가용한 메뉴 목록"에 **정확히 존재하는 이름**만 사용하세요. 한 글자라도 다르면 안 됩니다.
-2. 반드시 8개의 메뉴를 출력해야 합니다. 어떤 상황에서도 빈 결과는 허용되지 않습니다.
-3. 다른 설명이나 번호 매기기 없이, 쉼표(,)로 구분한 메뉴 이름 8개만 한 줄로 답하세요.
+1. 위 "가용한 메뉴 목록"에 **정확히 존재하는 이름**만 사용하세요.
+2. 각 옵션은 반드시 8개 메뉴로 구성하세요.
+3. 0점 메뉴는 절대 선택하지 마세요.
+4. 각 옵션에 특징을 담은 짧은 제목(8자 이내)을 괄호 안에 넣어 다음 형식으로만 출력하세요. 다른 설명 없이.
 
-출력 예시: 쌀밥, 배추김치, 멸치볶음, 콩자반, 시금치나물, 계란말이, 야채튀김, 된장찌개`
+옵션A (깔끔한 한식): 메뉴1, 메뉴2, 메뉴3, 메뉴4, 메뉴5, 메뉴6, 메뉴7, 메뉴8
+옵션B (든든한 단백질): 메뉴1, 메뉴2, 메뉴3, 메뉴4, 메뉴5, 메뉴6, 메뉴7, 메뉴8
+옵션C (가볍고 건강하게): 메뉴1, 메뉴2, 메뉴3, 메뉴4, 메뉴5, 메뉴6, 메뉴7, 메뉴8`
+    },
+    {
+      // ── Feature 2: 메뉴 추천 ────────────────────────────
+      // Inventory(메뉴 리스트) 화면에서 "AI 메뉴 추천" 버튼 클릭
+      // 최근 식단 이력을 기반으로 다음 식단에 넣을 단품 메뉴 추천
+      // mealService.ts: recommendMenus() → 플레이스홀더: {availableMenusText}, {recentMealsText}
+      id: "menu_recommend",
+      description: "메뉴 추천 — 최근 이력 기반으로 다음 식단에 포함하면 좋을 단품 메뉴 5~8개 추천",
+      content: `당신은 구내식당 식단 전문가입니다. 다음 메뉴 목록과 최근 식단 이력을 참고해서, 다음 식단에 포함하면 좋을 메뉴들을 추천해주세요.
+
+## 가용한 메뉴 목록 (카테고리별)
+{availableMenusText}
+
+## 최근 식단 이력
+{recentMealsText}
+
+## 추천 규칙
+1. 위 "가용한 메뉴 목록"에 **정확히 존재하는 이름**만 사용하세요.
+2. 최근에 자주 등장한 메뉴는 피하고, 오랫동안 나오지 않은 메뉴를 우선 추천하세요.
+3. 밥·국·주메뉴·반찬 등 카테고리 균형을 맞춰 추천하세요.
+4. 총 5~8개의 메뉴를 추천하세요.
+5. 메뉴 이름만 쉼표(,)로 구분하여 한 줄로 출력하세요. 설명 없이.
+
+출력 예시: 잡곡밥, 된장찌개, 제육볶음, 시금치나물, 깍두기, 콩자반`
+    },
+    {
+      // ── Feature 3: 콤보 추천 ────────────────────────────
+      // Inventory(메뉴 리스트) 화면에서 "AI 콤보 추천" 버튼 클릭
+      // 단품 메뉴 목록에서 함께 제공하면 좋을 조합을 콤보로 제안
+      // mealService.ts: suggestCombos() → 플레이스홀더: {availableMenusText}
+      id: "combo_suggest",
+      description: "콤보 추천 — 단품 메뉴 목록에서 영양 균형 잡힌 콤보 세트 2~3가지 제안",
+      content: `당신은 구내식당 식단 기획자입니다. 아래 단품 메뉴 목록에서 함께 제공하면 영양과 맛의 균형이 잡힌 콤보 세트를 제안해주세요.
+
+## 가용한 단품 메뉴 목록 (카테고리별)
+{availableMenusText}
+
+## 콤보 구성 규칙
+1. 위 목록에 **정확히 존재하는 이름**만 사용하세요.
+2. 하나의 콤보는 밥 1 + 국/찌개 1 + 주메뉴 또는 부메뉴 1~2 + 반찬 1~2 구성으로, 3~5개 메뉴를 포함하세요.
+3. 영양 균형(탄수화물·단백질·채소)과 맛의 조화를 고려하세요.
+4. 총 2~3개의 콤보를 제안하세요.
+
+## 출력 형식 (반드시 준수)
+각 콤보를 다음 형식으로 출력하세요. 다른 설명은 하지 마세요.
+[콤보명]: 메뉴A, 메뉴B, 메뉴C
+
+출력 예시:
+[든든한 한식 세트]: 쌀밥, 된장찌개, 제육볶음, 시금치나물, 배추김치
+[가벼운 정식]: 잡곡밥, 맑은국, 두부조림, 콩나물무침, 깍두기`
     }
   ];
 
-  // json_parser, chat_base는 사용자 편집 보존 (DO NOTHING)
-  const insertPrompt = db.prepare(`
-    INSERT INTO prompts (id, description, content)
-    VALUES (?, ?, ?)
-    ON CONFLICT(id) DO NOTHING
-  `);
-  for (const p of seedPrompts.filter(p => p.id !== 'auto_gen')) {
-    insertPrompt.run(p.id, p.description, p.content);
-  }
-
-  // auto_gen은 코드와 강하게 결합되어 있으므로 항상 최신 버전으로 갱신
-  const autoGen = seedPrompts.find(p => p.id === 'auto_gen');
-  db.prepare(`
+  // 모든 프롬프트를 항상 최신 코드 버전으로 갱신 (프롬프트 편집 UI 제거됨)
+  const upsertPrompt = db.prepare(`
     INSERT INTO prompts (id, description, content)
     VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET content = excluded.content, description = excluded.description
-  `).run(autoGen.id, autoGen.description, autoGen.content);
+  `);
+  for (const p of seedPrompts) {
+    upsertPrompt.run(p.id, p.description, p.content);
+  }
 
   try {
     // 마이그레이션: 기존 DB에 sort_order 컬럼이 없으면 추가
@@ -187,6 +256,13 @@ function sendJSON(res, data, status = 200) {
 }
 
 async function handleAPI(req, res) {
+  // DB가 닫혀있으면 재초기화
+  if (!db || !db.open) {
+    try { initDatabase(); } catch (e) {
+      return sendJSON(res, { error: 'Database initialization failed' }, 500);
+    }
+  }
+
   const url = req.url.split('?')[0];
   const method = req.method;
 
@@ -501,11 +577,16 @@ app.whenReady().then(async () => {
   createWindow();
 
   app.on('activate', () => {
+    // macOS: DB가 닫혀있으면 재초기화
+    if (!db || !db.open) initDatabase();
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-  if (db) db.close();
+  if (process.platform !== 'darwin') {
+    if (db) db.close();
+    app.quit();
+  }
+  // macOS에서는 앱이 살아있으므로 DB를 닫지 않음
 });

@@ -1,51 +1,113 @@
 /**
  * 식단 도메인 AI 서비스
- * Gemini API 클라이언트(gemini.ts)를 사용하는 도메인별 ask 로직
+ * Gemini API 클라이언트(gemini.ts)를 사용하는 3가지 AI 기능 구현
+ *
+ * Feature 1: PLAN NOW       — auto_gen 프롬프트, CalendarTab.autoGenerateMeal()에서 사용
+ * Feature 2: 메뉴 추천       — menu_recommend 프롬프트, recommendMenus() 사용
+ * Feature 3: 콤보 추천       — combo_suggest 프롬프트, suggestCombos() 사용
+ * 보조:      재료 자동 추천   — ingredient_suggest 프롬프트, suggestIngredients() 사용
  */
 
 import { callGeminiText } from "$lib/services/gemini";
-import type { Prompt } from "$lib/types/models";
+import type { MenuItem, Category, Prompt } from "$lib/types/models";
+import { buildAvailableMenusText } from "$lib/services/mealGeneration";
 
 const MENU_CONSTRAINT = (menus: string[]) =>
-    `\n\n[중요 제약조건]\n반드시 다음 <가용한 사용자 메뉴 목록> 안에 존재하는 요리들로만 식단을 구성하세요.\n여기에 없는 메뉴는 절대 발명하거나 추천하지 마세요.\n\n<가용한 사용자 메뉴 목록>\n${menus.join(", ")}`;
+    `\n\n[중요 제약조건]\n반드시 다음 <가용한 사용자 메뉴 목록> 안에 존재하는 요리들로만 구성하세요.\n여기에 없는 메뉴는 절대 사용하지 마세요.\n\n<가용한 사용자 메뉴 목록>\n${menus.join(", ")}`;
 
+function getSystemInstruction(prompts: Prompt[] | undefined): string {
+    return (
+        prompts?.find((p) => p.id === "chat_base")?.content ??
+        "당신은 구내식당 식단 전문가입니다. 주어진 규칙과 데이터를 정확히 따라 요청한 형식으로만 응답하세요."
+    );
+}
+
+// ── Feature 1: PLAN NOW ────────────────────────────────────────────────────
 /**
- * 자유 텍스트 식단표를 JSON으로 변환 (json_parser 프롬프트 사용)
+ * 달력 선택 날짜의 하루 식단 전체 자동 구성 (auto_gen 프롬프트)
+ * CalendarTab.svelte의 autoGenerateMeal()에서 직접 호출
+ * 프롬프트 컨텍스트 조립은 CalendarTab에서 처리 (frequencyData, availableMenusText, recentMealsText 치환 후 전달)
  */
-export async function convertMealText(
-    text: string,
+export async function askGemini(
+    prompt: string,
     apiKey: string,
     availableMenus?: string[],
     prompts?: Prompt[],
-): Promise<unknown> {
-    const base =
-        prompts?.find((p) => p.id === "json_parser")?.content ??
-        "당신은 식단 분석 및 데이터 정형화 전문가입니다. 사용자가 제공하는 자유로운 텍스트 형식의 식단표를 분석하여 구조화된 JSON 데이터 포맷으로만 응답해야 합니다.";
-
+): Promise<string> {
     const systemInstruction =
         availableMenus && availableMenus.length > 0
-            ? base + MENU_CONSTRAINT(availableMenus)
-            : base;
+            ? getSystemInstruction(prompts) + MENU_CONSTRAINT(availableMenus)
+            : getSystemInstruction(prompts);
 
-    const raw = await callGeminiText(text, systemInstruction, apiKey);
-
-    // 마크다운 백틱 제거
-    const jsonText = raw
-        .replace(/^```json\s*/, "")
-        .replace(/^```\s*/, "")
-        .replace(/```$/, "")
-        .trim();
-
-    try {
-        return JSON.parse(jsonText);
-    } catch (e) {
-        console.error("JSON 파싱 에러:", e, "Raw text:", jsonText);
-        throw new Error("AI 응답을 JSON으로 변환하는 데 실패했습니다.");
-    }
+    return callGeminiText(prompt, systemInstruction, apiKey);
 }
 
+// ── Feature 2: 메뉴 추천 ───────────────────────────────────────────────────
 /**
- * 메뉴 이름으로 재료 추천 (ingredient_suggest 프롬프트 사용)
+ * 최근 식단 이력 기반 단품 메뉴 추천 (menu_recommend 프롬프트)
+ * Inventory 화면 "AI 메뉴 추천" 버튼에서 호출
+ * @returns 추천 메뉴 이름 배열 (기존 menuItems에서 검증된 항목만)
+ */
+export async function recommendMenus(
+    menuItems: MenuItem[],
+    categories: Category[],
+    recentMealsText: string,
+    apiKey: string,
+    prompts?: Prompt[],
+): Promise<string[]> {
+    const basePrompt =
+        prompts?.find((p) => p.id === "menu_recommend")?.content ??
+        "가용한 메뉴 목록과 최근 식단 이력을 참고해서, 다음 식단에 포함하면 좋을 메뉴 5~8개를 쉼표로 구분하여 한 줄로 추천하세요.";
+
+    const availableMenusText = buildAvailableMenusText(menuItems, categories);
+    const promptText = basePrompt
+        .replace("{availableMenusText}", availableMenusText)
+        .replace("{recentMealsText}", recentMealsText);
+
+    const allMenuNames = menuItems.map((m) => m.name);
+    const raw = await callGeminiText(
+        promptText,
+        getSystemInstruction(prompts),
+        apiKey,
+    );
+
+    // 응답에서 메뉴 이름 파싱 후 실제 목록에 있는 항목만 반환
+    return raw
+        .split(/,|\n/)
+        .map((s) => s.trim())
+        .filter((name) => allMenuNames.includes(name));
+}
+
+// ── Feature 3: 콤보 추천 ───────────────────────────────────────────────────
+/**
+ * 단품 메뉴 목록에서 콤보 세트 구성 제안 (combo_suggest 프롬프트)
+ * Inventory 화면 "AI 콤보 추천" 버튼에서 호출
+ * @returns 콤보 제안 원문 텍스트 (UI에서 파싱하여 표시)
+ *   형식: "[콤보명]: 메뉴A, 메뉴B, 메뉴C\n[콤보명2]: ..."
+ */
+export async function suggestCombos(
+    menuItems: MenuItem[],
+    categories: Category[],
+    apiKey: string,
+    prompts?: Prompt[],
+): Promise<string> {
+    const basePrompt =
+        prompts?.find((p) => p.id === "combo_suggest")?.content ??
+        "단품 메뉴 목록에서 함께 제공하면 좋을 콤보 세트 2~3가지를 [콤보명]: 메뉴A, 메뉴B 형식으로 제안하세요.";
+
+    const availableMenusText = buildAvailableMenusText(menuItems, categories);
+    const promptText = basePrompt.replace(
+        "{availableMenusText}",
+        availableMenusText,
+    );
+
+    return callGeminiText(promptText, getSystemInstruction(prompts), apiKey);
+}
+
+// ── 보조: 재료 자동 추천 ───────────────────────────────────────────────────
+/**
+ * 메뉴 이름으로 재료 추천 (ingredient_suggest 프롬프트)
+ * ModalMenuRegistry.svelte의 재료 자동 입력 기능에서 사용
  */
 export async function suggestIngredients(
     menuName: string,
@@ -62,25 +124,4 @@ export async function suggestIngredients(
         .split(/[,，\n]/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0 && s.length < 20);
-}
-
-/**
- * 일반 식단 채팅 (chat_base 프롬프트 사용)
- */
-export async function askGemini(
-    prompt: string,
-    apiKey: string,
-    availableMenus?: string[],
-    prompts?: Prompt[],
-): Promise<string> {
-    const base =
-        prompts?.find((p) => p.id === "chat_base")?.content ??
-        "당신은 사용자의 식단을 분석하고 추천해주는 다정한 AI 비서입니다.";
-
-    const systemInstruction =
-        availableMenus && availableMenus.length > 0
-            ? base + MENU_CONSTRAINT(availableMenus)
-            : base;
-
-    return callGeminiText(prompt, systemInstruction, apiKey);
 }
