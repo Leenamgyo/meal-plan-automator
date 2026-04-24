@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { askGemini } from "$lib/gemini";
-    import { PUBLIC_GEMINI_API_KEY } from "$env/static/public";
+    import { askGemini } from "$lib/services/mealService";
+    import { geminiKey } from "$lib/stores";
 
-    export let geminiKey: string;
+    // (레거시 컴포넌트 — 현재 +page.svelte에서 사용하지 않음)
 
     interface Message {
         role: "user" | "ai";
@@ -20,7 +20,7 @@
         inputText = "";
         messages = [...messages, { role: "user", text: userMsg }];
 
-        const apiKey = PUBLIC_GEMINI_API_KEY || geminiKey;
+        const apiKey = $geminiKey;
         if (!apiKey) {
             messages = [
                 ...messages,

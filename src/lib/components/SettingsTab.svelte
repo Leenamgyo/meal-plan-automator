@@ -7,51 +7,71 @@
         updateCategory,
         fetchCategories,
     } from "$lib/services/categories";
+    import { fetchMenuItems } from "$lib/services/menuItems";
     import type { Category } from "$lib/types/models";
-    import { aiIngredientsEnabled } from "$lib/stores";
     import { moveItemUp, moveItemDown } from "$lib/utils/arrayUtils";
 
-    let saveMsgVisible = false;
-    let confirmDelete = true;
-    let activeSection: "api" | "categories" | "general" = "api";
+    // ── Sidebar ──────────────────────────────────────────────
+    let activeSection: "profile" | "categories" = "profile";
 
+    const sections = [
+        { id: "profile", icon: "storefront", label: "Restaurant Profile" },
+        { id: "categories", icon: "category", label: "Category Management" },
+    ] as const;
+
+    // ── Profile ──────────────────────────────────────────────
+    let saveMsgVisible = false;
+    let restaurantName = "";
+    let restaurantDesc = "";
+    let aiRecommendCount = 5;
+
+    // ── Categories ───────────────────────────────────────────
     let categories: Category[] = [];
+    let menuCountMap: Record<number, number> = {};
+    let editingCatId: number | null = null;
 
     onMount(async () => {
-        const cd = localStorage.getItem("confirmDelete");
-        confirmDelete = cd === null ? true : cd === "true";
+        restaurantName = localStorage.getItem("restaurantName") ?? "";
+        restaurantDesc = localStorage.getItem("restaurantDesc") ?? "";
+        aiRecommendCount = parseInt(
+            localStorage.getItem("aiRecommendCount") ?? "5",
+            10,
+        );
 
         categories = await fetchCategories();
         categories.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+        const items = await fetchMenuItems();
+        for (const item of items) {
+            if (item.category_id != null) {
+                menuCountMap[item.category_id] =
+                    (menuCountMap[item.category_id] ?? 0) + 1;
+            }
+        }
+        menuCountMap = { ...menuCountMap };
     });
 
+    // ── Category actions ─────────────────────────────────────
     async function addCategory() {
-        const newCat = await createCategory("새 카테고리", "#cccccc");
+        const newCat = await createCategory("새 카테고리", "#4caf50");
         if (newCat) {
             categories = [...categories, newCat];
+            editingCatId = newCat.id;
         }
     }
 
     async function removeCategory(id: number) {
-        const success = await deleteCategory(id);
-        if (success) {
+        if (!confirm("이 카테고리를 삭제할까요?")) return;
+        if (await deleteCategory(id))
             categories = categories.filter((c) => c.id !== id);
-        }
     }
 
-    function moveCategoryUp(index: number) {
-        categories = moveItemUp(categories, index);
-    }
-
-    function moveCategoryDown(index: number) {
-        categories = moveItemDown(categories, index);
-    }
-
+    // ── Profile save ─────────────────────────────────────────
     async function saveSettings() {
         localStorage.setItem("geminiKey", $geminiKey);
-        localStorage.setItem("aiIngredientsEnabled", String($aiIngredientsEnabled));
-        localStorage.setItem("confirmDelete", String(confirmDelete));
-
+        localStorage.setItem("restaurantName", restaurantName);
+        localStorage.setItem("restaurantDesc", restaurantDesc);
+        localStorage.setItem("aiRecommendCount", String(aiRecommendCount));
         for (let i = 0; i < categories.length; i++) {
             const cat = categories[i];
             await updateCategory(cat.id, {
@@ -61,574 +81,386 @@
             });
             cat.sort_order = i;
         }
-        localStorage.setItem("menuCategories", JSON.stringify(categories));
-
         saveMsgVisible = true;
-        setTimeout(() => {
-            saveMsgVisible = false;
-        }, 2000);
+        setTimeout(() => (saveMsgVisible = false), 2000);
     }
 
-    const sectionMeta = [
-        { id: "api",        icon: "🔑", label: "API 연동" },
-        { id: "categories", icon: "🏷️", label: "카테고리" },
-        { id: "general",    icon: "⚙️", label: "일반" },
-    ] as const;
 </script>
 
-<div class="settings-layout">
-    <!-- ── 왼쪽 사이드바 ── -->
-    <nav class="settings-nav">
-        <div class="nav-title">환경설정</div>
-
-        {#each sectionMeta as sec}
-            <button
-                class="nav-item"
-                class:active={activeSection === sec.id}
-                on:click={() => (activeSection = sec.id)}
-            >
-                <span class="nav-icon">{sec.icon}</span>
-                {sec.label}
-            </button>
-        {/each}
-
-        <div class="nav-footer">
-            <button class="btn-save" on:click={saveSettings}>저장</button>
-            {#if saveMsgVisible}
-                <div class="save-toast">저장됨 ✓</div>
-            {/if}
+<div class="flex h-full bg-surface overflow-hidden no-drag">
+    <!-- Left: Navigation Sidebar -->
+    <nav class="w-64 bg-surface-container-low p-4 flex flex-col flex-shrink-0">
+        <div class="mb-8 px-2">
+            <h2 class="font-headline font-bold text-lg text-primary">
+                Settings
+            </h2>
+            <p class="text-xs text-on-surface-variant mt-0.5">
+                Local Configuration
+            </p>
         </div>
+
+        <div class="flex-1 space-y-1">
+            {#each sections as sec}
+                <button
+                    class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all
+                           {activeSection === sec.id
+                        ? 'bg-surface-container-lowest text-primary shadow-sm'
+                        : 'text-on-surface-variant hover:bg-surface-container-lowest/60'}"
+                    on:click={() => (activeSection = sec.id)}
+                >
+                    <span
+                        class="material-symbols-outlined"
+                        style="font-size:20px; line-height:1">{sec.icon}</span
+                    >
+                    {sec.label}
+                </button>
+            {/each}
+        </div>
+
+        <div class="mt-auto pt-4 space-y-3">
+                {#if saveMsgVisible}
+                    <div
+                        class="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest py-2 px-4 rounded-full text-center"
+                    >
+                        Saved ✓
+                    </div>
+                {/if}
+                <button
+                    class="w-full bg-primary text-white font-bold py-3 rounded-2xl shadow-md shadow-primary/20 hover:opacity-90 transition-all text-sm"
+                    on:click={saveSettings}
+                >
+                    Apply Changes
+                </button>
+            </div>
     </nav>
 
-    <!-- ── 오른쪽 컨텐츠 ── -->
-    <div class="settings-content">
+    <!-- Right: Content Area -->
+    <div class="flex-1 overflow-hidden flex flex-col">
+        <!-- ══════════════════════════════════════════════════
+             Restaurant Profile
+        ══════════════════════════════════════════════════ -->
+        {#if activeSection === "profile"}
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-10">
+                <div class="max-w-2xl space-y-8">
+                    <header>
+                        <span
+                            class="text-[10px] font-bold text-primary uppercase tracking-widest"
+                            >CONFIGURATION</span
+                        >
+                        <h1
+                            class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1"
+                        >
+                            Restaurant Profile
+                        </h1>
+                        <p
+                            class="text-sm text-on-surface-variant mt-1 leading-relaxed"
+                        >
+                            식당의 기본 정보와 앱 동작 설정을 관리합니다.
+                        </p>
+                    </header>
 
-        <!-- API 연동 -->
-        {#if activeSection === "api"}
-            <div class="section-header">
-                <h2>API 연동</h2>
-                <p>AI 기능 사용을 위한 Gemini API 키를 설정합니다.</p>
-            </div>
+                    <!-- Identity -->
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-8 space-y-5"
+                    >
+                        <h3 class="text-sm font-bold text-on-surface">
+                            기본 정보
+                        </h3>
+                        <div class="space-y-1.5">
+                            <label
+                                for="restaurant-name"
+                                class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                >식당 이름</label
+                            >
+                            <input
+                                id="restaurant-name"
+                                type="text"
+                                class="w-full bg-surface-container-lowest rounded-xl py-3.5 px-5 text-lg font-headline font-bold focus:ring-2 focus:ring-primary/20 transition-all outline-none border-none"
+                                bind:value={restaurantName}
+                                placeholder="예: 더 리빙 키친"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label
+                                for="restaurant-desc"
+                                class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                >소개 및 운영 철학</label
+                            >
+                            <textarea
+                                id="restaurant-desc"
+                                class="w-full bg-surface-container-lowest rounded-xl py-3.5 px-5 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none resize-none border-none custom-scrollbar"
+                                rows="4"
+                                bind:value={restaurantDesc}
+                                placeholder="식당 소개, 특별한 메뉴 구성, 고객에게 전달할 메시지를 입력하세요."
+                            ></textarea>
+                        </div>
+                    </div>
 
-            <div class="settings-card">
-                <div class="field-label">Gemini API 키</div>
-                <input
-                    type="password"
-                    bind:value={$geminiKey}
-                    placeholder="AIzaSy..."
-                    class="field-input"
-                />
-                <div class="field-hint">
-                    런타임 키는 환경변수 <code>PUBLIC_GEMINI_API_KEY</code>보다 우선 적용됩니다.
-                    설정 저장 후 즉시 반영됩니다.
+                    <!-- Gemini API Key -->
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-8 space-y-4"
+                    >
+                        <h3 class="text-sm font-bold text-on-surface">
+                            Gemini API Key
+                        </h3>
+                        <div class="relative">
+                            <span
+                                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline"
+                                style="font-size:20px">key</span
+                            >
+                            <input
+                                type="password"
+                                class="w-full bg-surface-container-lowest rounded-xl py-3.5 pl-12 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none font-mono border-none"
+                                bind:value={$geminiKey}
+                                placeholder="Enter your Gemini API key..."
+                            />
+                        </div>
+                        <p
+                            class="text-[11px] text-on-surface-variant leading-relaxed"
+                        >
+                            Google AI Studio에서 발급받은 키를 입력하세요.
+                            로컬에만 저장됩니다.
+                        </p>
+                    </div>
+
+                    <!-- AI Settings -->
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-8 space-y-5"
+                    >
+                        <h3 class="text-sm font-bold text-on-surface">
+                            AI 추천 설정
+                        </h3>
+                        <div class="space-y-3">
+                            <div
+                                class="flex items-center justify-between mb-1"
+                            >
+                                <label
+                                    for="ai-count"
+                                    class="text-[10px] font-bold uppercase tracking-widest text-outline"
+                                    >추천 콤보 수</label
+                                >
+                                <span
+                                    class="text-lg font-extrabold text-primary font-headline"
+                                    >{aiRecommendCount}개</span
+                                >
+                            </div>
+                            <input
+                                id="ai-count"
+                                type="range"
+                                min="3"
+                                max="12"
+                                bind:value={aiRecommendCount}
+                                class="w-full accent-primary"
+                            />
+                            <div
+                                class="flex justify-between text-[10px] text-outline"
+                            >
+                                <span>3개 (간단)</span>
+                                <span>12개 (풍성)</span>
+                            </div>
+                        </div>
+                        <p
+                            class="text-[11px] text-on-surface-variant leading-relaxed"
+                        >
+                            AI 추천 시 보여줄 콤보 후보 수입니다. 그 중 하나를
+                            선택해 날짜 배정 또는 콤보 등록을 할 수 있습니다.
+                            변경 후 Apply Changes를 눌러 저장하세요.
+                        </p>
+                    </div>
+
+                    <!-- System Status Footer -->
+                    <div
+                        class="bg-surface-container-low rounded-2xl p-6 flex items-center gap-4"
+                    >
+                        <div
+                            class="w-2 h-2 rounded-full bg-primary animate-pulse flex-shrink-0"
+                        ></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs font-bold text-on-surface">
+                                System Normal
+                            </div>
+                            <div class="text-[10px] text-on-surface-variant">
+                                Local database connected · http://127.0.0.1:3737
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-        <!-- 카테고리 -->
+            <!-- ══════════════════════════════════════════════════
+             Category Management
+        ══════════════════════════════════════════════════ -->
         {:else if activeSection === "categories"}
-            <div class="section-header">
-                <h2>카테고리</h2>
-                <p>메뉴에 붙는 카테고리와 색상을 관리합니다. 순서를 조정하면 필터 바에도 반영됩니다.</p>
-            </div>
-
-            <div class="settings-card cat-card">
-                {#each categories as cat, i (cat.id)}
-                    <div class="category-row">
-                        <input
-                            type="color"
-                            bind:value={cat.color}
-                            class="color-picker"
-                            title="색상 선택"
-                        />
-                        <div
-                            class="cat-color-swatch"
-                            style="background:{cat.color};"
-                        ></div>
-                        <input
-                            type="text"
-                            bind:value={cat.name}
-                            class="category-name-input"
-                            placeholder="카테고리명"
-                        />
-                        <div class="cat-actions">
-                            <button
-                                class="cat-order-btn"
-                                on:click={() => moveCategoryUp(i)}
-                                disabled={i === 0}
-                                aria-label="위로"
-                            >▲</button>
-                            <button
-                                class="cat-order-btn"
-                                on:click={() => moveCategoryDown(i)}
-                                disabled={i === categories.length - 1}
-                                aria-label="아래로"
-                            >▼</button>
-                            <button
-                                class="cat-remove-btn"
-                                on:click={() => removeCategory(cat.id)}
-                                aria-label="삭제"
-                            >×</button>
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-10">
+                <div class="max-w-4xl">
+                    <header class="mb-10 flex items-end justify-between">
+                        <div>
+                            <span
+                                class="text-[10px] font-bold text-primary uppercase tracking-widest"
+                                >CONFIGURATION</span
+                            >
+                            <h1
+                                class="text-3xl font-headline font-extrabold tracking-tight text-on-surface mt-1"
+                            >
+                                카테고리 관리
+                            </h1>
+                            <p
+                                class="text-sm text-on-surface-variant mt-1 leading-relaxed"
+                            >
+                                식단 분류를 위한 카테고리를 관리합니다. 아이콘,
+                                색상 및 사용 여부를 설정할 수 있습니다.
+                            </p>
                         </div>
-                    </div>
-                {/each}
-                <button class="btn-add-category" on:click={addCategory}>
-                    + 카테고리 추가
-                </button>
-            </div>
+                        <button
+                            class="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-full font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-all text-sm flex-shrink-0 ml-6"
+                            on:click={addCategory}
+                        >
+                            <span
+                                class="material-symbols-outlined"
+                                style="font-size:18px">add</span
+                            >
+                            새 카테고리 추가
+                        </button>
+                    </header>
 
-        <!-- 일반 -->
-        {:else if activeSection === "general"}
-            <div class="section-header">
-                <h2>일반</h2>
-                <p>앱의 기본 동작 방식을 설정합니다.</p>
-            </div>
+                    <div
+                        class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+                    >
+                        {#each categories as cat, i (cat.id)}
+                            <div
+                                class="bg-surface-container-lowest p-6 rounded-[1.25rem] shadow-sm flex flex-col gap-5 hover:shadow-md transition-all"
+                            >
+                                <!-- Top: color icon + edit/delete -->
+                                <div class="flex justify-between items-start">
+                                    <div
+                                        class="relative w-16 h-16 rounded-2xl flex items-center justify-center cursor-pointer overflow-hidden"
+                                        style="background-color: {cat.color}20"
+                                    >
+                                        <input
+                                            type="color"
+                                            bind:value={cat.color}
+                                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:28px; color: {cat.color}"
+                                            >palette</span
+                                        >
+                                    </div>
+                                    <div class="flex gap-1">
+                                        <button
+                                            class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant"
+                                            on:click={() =>
+                                                (editingCatId =
+                                                    editingCatId === cat.id
+                                                        ? null
+                                                        : cat.id)}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                style="font-size:20px"
+                                                >edit</span
+                                            >
+                                        </button>
+                                        <button
+                                            class="p-2 hover:bg-error-container/30 rounded-lg transition-colors text-on-surface-variant hover:text-error"
+                                            on:click={() =>
+                                                removeCategory(cat.id)}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                style="font-size:20px"
+                                                >delete</span
+                                            >
+                                        </button>
+                                    </div>
+                                </div>
 
-            <div class="settings-card">
-                <label class="toggle-row">
-                    <div class="toggle-info">
-                        <div class="toggle-title">삭제 확인 대화 상자</div>
-                        <div class="toggle-desc">메뉴 삭제 시 확인 창을 표시합니다.</div>
+                                <!-- Name -->
+                                <div>
+                                    {#if editingCatId === cat.id}
+                                        <input
+                                            type="text"
+                                            class="text-xl font-headline font-bold text-on-surface bg-surface-container-low rounded-xl px-3 py-1.5 w-full outline-none border-none focus:ring-2 focus:ring-primary/20"
+                                            bind:value={cat.name}
+                                            on:blur={() =>
+                                                (editingCatId = null)}
+                                        />
+                                    {:else}
+                                        <h3
+                                            class="text-xl font-headline font-bold text-on-surface"
+                                        >
+                                            {cat.name}
+                                        </h3>
+                                    {/if}
+                                    <span
+                                        class="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded"
+                                        style="color: {cat.color}; background-color: {cat.color}15"
+                                    >
+                                        Linked Menus: {menuCountMap[cat.id] ??
+                                            0}
+                                    </span>
+                                </div>
+
+                                <!-- Bottom: color picker button -->
+                                <div
+                                    class="pt-4 border-t border-surface-container-low mt-auto"
+                                >
+                                    <label
+                                        class="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider hover:bg-primary/5 px-3 py-2 rounded-lg transition-colors cursor-pointer w-fit relative"
+                                    >
+                                        <input
+                                            type="color"
+                                            bind:value={cat.color}
+                                            class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                                        />
+                                        <span
+                                            class="material-symbols-outlined"
+                                            style="font-size:16px">palette</span
+                                        >
+                                        대표 색상 선택
+                                    </label>
+                                </div>
+                            </div>
+                        {/each}
+
+                        <!-- Add placeholder card -->
+                        <button
+                            class="bg-surface-container-low border-2 border-dashed border-outline-variant p-6 rounded-[1.25rem] flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-surface-container-high transition-all group min-h-[180px]"
+                            on:click={addCategory}
+                        >
+                            <div
+                                class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center group-hover:scale-110 transition-transform"
+                            >
+                                <span
+                                    class="material-symbols-outlined text-outline"
+                                    style="font-size:24px">add_circle</span
+                                >
+                            </div>
+                            <span
+                                class="text-sm font-bold text-on-surface-variant"
+                                >새 카테고리 만들기</span
+                            >
+                        </button>
                     </div>
-                    <input
-                        type="checkbox"
-                        bind:checked={confirmDelete}
-                        class="toggle-checkbox"
-                    />
-                </label>
-                <label class="toggle-row">
-                    <div class="toggle-info">
-                        <div class="toggle-title">AI 재료 자동 추천</div>
-                        <div class="toggle-desc">메뉴 등록 시 AI가 재료를 자동으로 추천합니다. Gemini API 키가 필요합니다.</div>
-                    </div>
-                    <input
-                        type="checkbox"
-                        bind:checked={$aiIngredientsEnabled}
-                        class="toggle-checkbox"
-                    />
-                </label>
+                </div>
             </div>
         {/if}
     </div>
 </div>
 
 <style>
-    .settings-layout {
-        display: flex;
-        height: 100%;
-        overflow: hidden;
-        background: #f5f5f7;
+    :global(.animate-in) {
+        animation: animate-in 0.3s ease-out;
     }
-
-    /* ── 사이드바 ── */
-    .settings-nav {
-        width: 180px;
-        flex-shrink: 0;
-        background: #ebebeb;
-        border-right: 1px solid #c8c8c8;
-        display: flex;
-        flex-direction: column;
-        padding: 1.2rem 0.75rem;
-        gap: 2px;
-    }
-
-    .nav-title {
-        font-size: 0.7rem;
-        font-weight: 700;
-        color: #999;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        padding: 0 8px;
-        margin-bottom: 10px;
-    }
-
-    .nav-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 7px 10px;
-        border: none;
-        border-radius: 7px;
-        background: transparent;
-        font-size: 0.88rem;
-        color: #444;
-        cursor: pointer;
-        text-align: left;
-        transition: background 0.15s;
-        font-family: inherit;
-    }
-
-    .nav-item:hover {
-        background: #dcdcdc;
-    }
-
-    .nav-item.active {
-        background: #007aff;
-        color: white;
-        font-weight: 500;
-    }
-
-    .nav-icon {
-        font-size: 1rem;
-        flex-shrink: 0;
-    }
-
-    .nav-footer {
-        margin-top: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding-top: 16px;
-    }
-
-    .btn-save {
-        width: 100%;
-        padding: 8px;
-        background: #007aff;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 0.88rem;
-        font-weight: 600;
-        cursor: pointer;
-        font-family: inherit;
-        transition: background 0.15s;
-    }
-
-    .btn-save:hover {
-        background: #006ae6;
-    }
-
-    .save-toast {
-        text-align: center;
-        font-size: 0.78rem;
-        color: #27c93f;
-        font-weight: 500;
-    }
-
-    /* ── 컨텐츠 영역 ── */
-    .settings-content {
-        flex: 1;
-        padding: 2rem 2.5rem;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-    }
-
-    .section-header {
-        margin-bottom: 4px;
-    }
-
-    .section-header h2 {
-        margin: 0 0 4px;
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #1c1c1e;
-    }
-
-    .section-header p {
-        margin: 0;
-        font-size: 0.83rem;
-        color: #888;
-    }
-
-    /* ── 공통 카드 ── */
-    .settings-card {
-        background: white;
-        border: 1px solid #d8d8d8;
-        border-radius: 12px;
-        padding: 18px 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .field-label {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: #555;
-    }
-
-    .field-input {
-        padding: 9px 13px;
-        border: 1px solid #c8c8c8;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        outline: none;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        font-family: inherit;
-    }
-
-    .field-input:focus {
-        border-color: #007aff;
-        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.18);
-    }
-
-    .field-hint {
-        font-size: 0.78rem;
-        color: #999;
-        line-height: 1.5;
-    }
-
-    .field-hint code {
-        background: #f1f3f5;
-        padding: 1px 5px;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        color: #555;
-    }
-
-    /* ── 카테고리 ── */
-    .cat-card {
-        padding: 12px;
-        gap: 6px;
-    }
-
-    .category-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        background: #f8f9fa;
-        padding: 8px 10px;
-        border-radius: 8px;
-        border: 1px solid #eeeeee;
-    }
-
-    .cat-color-swatch {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        border: 1px solid rgba(0,0,0,0.1);
-        margin-left: -6px;
-    }
-
-    .cat-actions {
-        display: flex;
-        gap: 3px;
-        margin-left: auto;
-    }
-
-    .cat-order-btn {
-        width: 26px;
-        height: 26px;
-        border: 1px solid #ddd;
-        background: white;
-        border-radius: 5px;
-        font-size: 0.65rem;
-        cursor: pointer;
-        color: #666;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        transition: background 0.15s;
-    }
-
-    .cat-order-btn:hover:not(:disabled) {
-        background: #f0f0f0;
-    }
-
-    .cat-order-btn:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-    }
-
-    .cat-remove-btn {
-        width: 26px;
-        height: 26px;
-        border: none;
-        background: none;
-        border-radius: 5px;
-        font-size: 1.1rem;
-        cursor: pointer;
-        color: #bbb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        transition: color 0.15s;
-    }
-
-    .cat-remove-btn:hover {
-        color: #fa5252;
-    }
-
-    /* ── 프롬프트 아코디언 ── */
-    .prompt-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .prompt-accordion {
-        background: white;
-        border: 1px solid #d8d8d8;
-        border-radius: 12px;
-        overflow: hidden;
-        transition: box-shadow 0.2s;
-    }
-
-    .prompt-accordion.open {
-        box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-    }
-
-    .prompt-accordion-header {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 14px 18px;
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        font-family: inherit;
-        text-align: left;
-        gap: 10px;
-    }
-
-    .prompt-accordion-header:hover {
-        background: #fafafa;
-    }
-
-    .prompt-title-group {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
-    .prompt-name {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #333;
-    }
-
-    .prompt-id-badge {
-        font-size: 0.72rem;
-        background: #f1f3f5;
-        color: #666;
-        padding: 2px 7px;
-        border-radius: 10px;
-        font-family: monospace;
-    }
-
-    .system-badge {
-        font-size: 0.7rem;
-        background: #fff3cd;
-        color: #856404;
-        padding: 2px 7px;
-        border-radius: 10px;
-        font-weight: 500;
-    }
-
-    .accordion-chevron {
-        font-size: 0.65rem;
-        color: #aaa;
-        flex-shrink: 0;
-    }
-
-    .prompt-accordion-body {
-        padding: 0 18px 18px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        border-top: 1px solid #f0f0f0;
-        padding-top: 14px;
-    }
-
-    .prompt-desc {
-        font-size: 0.78rem;
-        color: #888;
-    }
-
-    .system-notice {
-        font-size: 0.78rem;
-        color: #856404;
-        background: #fff8e1;
-        border: 1px solid #ffe082;
-        border-radius: 7px;
-        padding: 8px 12px;
-        line-height: 1.5;
-    }
-
-    .prompt-meta-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .meta-label {
-        font-size: 0.78rem;
-        color: #888;
-        font-weight: 500;
-    }
-
-    .version-input {
-        width: 64px;
-        padding: 4px 8px;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        outline: none;
-        font-family: monospace;
-    }
-
-    .version-input:focus {
-        border-color: #007aff;
-    }
-
-    .prompt-textarea {
-        width: 100%;
-        min-height: 160px;
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 0.82rem;
-        font-family: "SF Mono", "Menlo", monospace;
-        resize: vertical;
-        outline: none;
-        line-height: 1.55;
-        box-sizing: border-box;
-        color: #333;
-    }
-
-    .prompt-textarea:focus {
-        border-color: #007aff;
-        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
-    }
-
-    /* ── 일반 ── */
-    .toggle-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        cursor: pointer;
-    }
-
-    .toggle-info {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
-
-    .toggle-title {
-        font-size: 0.88rem;
-        font-weight: 500;
-        color: #333;
-    }
-
-    .toggle-desc {
-        font-size: 0.78rem;
-        color: #999;
-    }
-
-    .toggle-checkbox {
-        width: 18px;
-        height: 18px;
-        cursor: pointer;
-        flex-shrink: 0;
-        accent-color: #007aff;
+    @keyframes animate-in {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 </style>

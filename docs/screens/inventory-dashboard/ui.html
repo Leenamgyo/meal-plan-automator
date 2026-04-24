@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Living Kitchen - Inventory Management</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root { --primary: #2d5a27; --bg: #f4f7f6; --surface: #ffffff; --border: #e0e0e0; }
+        body { font-family: 'Pretendard', sans-serif; margin: 0; background: var(--bg); }
+        
+        .inventory-container { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+        .inventory-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; background: var(--surface); padding: 1rem 2rem; border-radius: 12px; border: 1px solid var(--border); }
+        .title-group h1 { margin: 0; font-size: 1.2rem; color: var(--primary); }
+        .title-group p { margin: 0; font-size: 0.9rem; color: #666; }
+
+        .inventory-stats { margin-bottom: 2rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 1rem; }
+        .stat-card { background: var(--surface); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; }
+        .stat-card .label { font-size: 0.9rem; color: #666; margin-bottom: 0.5rem; }
+        .stat-card .value { font-size: 2rem; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+        .stat-card small { font-size: 1rem; color: #4caf50; }
+
+        .inventory-controls { background: var(--surface); padding: 1rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; margin-bottom: 2rem; }
+        .search-bar { flex: 1; display: flex; align-items: center; background: #f0f0f0; padding: 0.6rem 1rem; border-radius: 20px; min-width: 250px; }
+        .search-bar input { border: none; background: transparent; outline: none; margin-left: 10px; flex: 1; }
+        .filter-tabs { display: flex; gap: 8px; }
+        .filter-tabs button { padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border); background: white; cursor: pointer; font-size: 0.9rem; }
+        .filter-tabs button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
+        .menu-card { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; position: relative; display: flex; flex-direction: column; }
+        .menu-card.add-new { border: 2px dashed #ccc; background: #f9f9f9; display: flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; min-height: 250px; }
+        .menu-card.add-new:hover { border-color: var(--primary); background: #f1f8e9; }
+        .menu-card.add-new .material-icons { font-size: 48px; color: #aaa; margin-bottom: 1rem; }
+        
+        .card-header { padding: 1rem; display: flex; justify-content: flex-end; }
+        .menu-card.combo .card-header { justify-content: space-between; }
+        .badge { background: #333; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .delete-btn { color: #ff5252; background: none; border: none; cursor: pointer; }
+
+        .card-body { padding: 0 1.5rem 1.5rem; flex: 1; }
+        .card-body h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+        .card-body p { margin: 0 0 1rem; font-size: 0.85rem; color: #666; line-height: 1.4; }
+        .card-body .kcal { font-weight: bold; color: var(--primary); font-size: 0.9rem; margin-bottom: 10px; display: block; }
+        .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tag { font-size: 0.75rem; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; color: #555; }
+
+        .card-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
+        .status.active { color: #4caf50; font-size: 0.8rem; font-weight: bold; display: flex; align-items: center; gap: 4px; }
+        .status.active::before { content: ""; width: 8px; height: 8px; background: #4caf50; border-radius: 50%; }
+    </style>
+</head>
+<body>
+    <div class="inventory-container">
+        <header class="inventory-header">
+            <div class="title-group">
+                <h1>The Living Kitchen</h1>
+                <p>Planner Menu Management</p>
+            </div>
+            <button class="icon-btn" style="background:none; border:none; cursor:pointer;"><span class="material-icons">settings</span></button>
+        </header>
+
+        <section class="inventory-stats">
+            <h2>메뉴 및 콤보 관리</h2>
+            <p class="subtitle" style="color:#666; margin-top:-10px;">사용 상태 및 검색 UI 최적화</p>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="label">총 인벤토리</span>
+                    <span class="value">124 <small>+12%</small></span>
+                </div>
+                <div class="stat-card">
+                    <span class="label">활성 메뉴</span>
+                    <span class="value">98 <span class="material-icons" style="color:#4caf50">check_circle</span></span>
+                </div>
+                <div class="stat-card">
+                    <span class="label">콤보 구성</span>
+                    <span class="value">26 <span class="material-icons" style="color:#673ab7">layers</span></span>
+                </div>
+            </div>
+        </section>
+
+        <nav class="inventory-controls">
+            <div class="search-bar">
+                <span class="material-icons" style="color:#888;">search</span>
+                <input type="text" placeholder="초성 검색 가능...">
+            </div>
+            <div class="view-options" style="display:flex; align-items:center; gap:10px;">
+                <span class="material-icons" style="color:#666;">grid_view</span>
+                <select style="border:1px solid #ddd; padding:5px; border-radius:4px;">
+                    <option>LG (카드 크기)</option>
+                </select>
+            </div>
+            <div class="filter-tabs">
+                <button class="active">전체</button>
+                <button>샐러드</button>
+                <button>메인 요리</button>
+                <button>사이드</button>
+                <button class="combo-only" style="display:flex; align-items:center; gap:5px;"><span class="material-icons" style="font-size:16px;">layers</span> 콤보 전용</button>
+            </div>
+        </nav>
+
+        <div class="menu-grid">
+            <div class="menu-card add-new">
+                <span class="material-icons">add</span>
+                <div style="padding:0 20px;">
+                    <h3 style="margin:0;">새 메뉴 추가</h3>
+                    <p style="margin:5px 0 0; font-size:0.85rem; color:#888;">신규 메뉴 또는 콤보를 등록하세요</p>
+                </div>
+            </div>
+
+            <div class="menu-card">
+                <div class="card-header">
+                    <button class="delete-btn"><span class="material-icons" style="font-size:20px;">delete</span></button>
+                </div>
+                <div class="card-body">
+                    <h3>그린 아보카도 보울</h3>
+                    <p>신선한 아보카도와 퀴노아, 케일이 어우러진 시그니처 메뉴</p>
+                    <span class="kcal">420 kcal</span>
+                    <div class="tags">
+                        <span class="tag">Low Carb</span>
+                        <span class="tag">Vegan</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="status active">사용 중</span>
+                </div>
+            </div>
+
+            <div class="menu-card combo">
+                <div class="card-header">
+                    <span class="badge">COMBO</span>
+                    <button class="delete-btn"><span class="material-icons" style="font-size:20px;">delete</span></button>
+                </div>
+                <div class="card-body">
+                    <h3>데일리 활력 세트</h3>
+                    <p>그린 보울 + 무설탕 에이드 + 견과류 팩 구성</p>
+                    <span class="label" style="background:#fff3e0; color:#e65100; font-size:0.75rem; padding:2px 8px; border-radius:4px; font-weight:bold;">Best Seller</span>
+                </div>
+                <div class="card-footer">
+                    <span class="status active">사용 중</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -35,3 +35,11 @@ export interface Prompt {
     content: string;
     is_active: number;
 }
+
+export interface Combo {
+    id: number;
+    name: string;
+    description: string;
+    is_active: number;
+    items: MenuItem[];
+}

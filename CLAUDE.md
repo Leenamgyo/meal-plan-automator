@@ -8,7 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 npm install
 
-# Development: build + run Electron app
+# Frontend-only dev server (SvelteKit only; no Electron, no API)
+npm run dev
+
+# Development: build + run Electron app (full stack)
 npm start
 
 # Build SvelteKit static output only (+ fixes asset paths for Electron)
@@ -19,20 +22,27 @@ node scripts/seed.js
 
 # Package as distributable
 npm run dist
+
+# Clear Electron localStorage (run while app is closed)
+node clear-storage.js
 ```
 
 There are no lint or test commands configured in this project.
 
 ## CLAUDE.md 업데이트 규칙
 
-다음에 해당하는 변경이 생기면 **즉시 이 파일을 업데이트**한다:
+**모든 기능 구현 완료 후**, 아래 체크리스트를 확인하고 해당하는 항목이 있으면 **즉시 이 파일을 업데이트**한다:
 
-- 디렉토리 구조 또는 파일 위치 변경 (이동, 신규, 삭제)
-- 새 서비스 / 유틸 / 스토어 추가
-- import 규칙 변경 (어떤 모듈에서 무엇을 가져와야 하는지)
-- 아키텍처 레이어 책임 변경 (예: 도메인 로직이 다른 파일로 이동)
-- 탭 컴포넌트 추가 / 제거
-- 환경변수 또는 빌드 프로세스 변경
+- [ ] 디렉토리 구조 또는 파일 위치 변경 (이동, 신규, 삭제)
+- [ ] 새 서비스 / 유틸 / 스토어 추가
+- [ ] import 규칙 변경 (어떤 모듈에서 무엇을 가져와야 하는지)
+- [ ] 아키텍처 레이어 책임 변경 (예: 도메인 로직이 다른 파일로 이동)
+- [ ] 탭 컴포넌트 추가 / 제거
+- [ ] 환경변수 또는 빌드 프로세스 변경
+- [ ] `Frontend Source Structure` 섹션의 파일 목록이 실제와 일치하는지 확인
+- [ ] `SQLite Schema` 섹션이 실제 테이블 구조와 일치하는지 확인
+
+> **원칙:** 코드를 고쳤으면, CLAUDE.md도 같이 고친다. PR 반영 전 CLAUDE.md가 최신 상태인지 항상 검증한다.
 
 ---
 
@@ -192,29 +202,36 @@ src/lib/
 │   ├── menuItems.ts      # MenuItem CRUD + localStorage 폴백
 │   ├── mealData.ts       # MealData CRUD + localStorage 폴백
 │   ├── prompts.ts        # Prompt CRUD + localStorage 폴백
+│   ├── combos.ts         # Combo CRUD (fetchCombos, createCombo, updateCombo, deleteCombo)
 │   ├── gemini.ts         # 순수 Gemini API 클라이언트 (callGeminiText)
-│   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, convertMealText)
+│   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, recommendMenus, suggestCombos, suggestIngredients)
 │   └── mealGeneration.ts # AI 추천 순수 함수 (점수 계산, 프롬프트 빌드)
 ├── utils/
 │   ├── hangul.ts         # 한글 초성 검색 (hangulIncludes)
 │   ├── calendarUtils.ts  # 달력 날짜 계산 (buildCalendarDays, dateKey, isToday)
 │   └── arrayUtils.ts     # 배열 순서 변경 (moveItemUp, moveItemDown, swapItems)
 ├── stores/
-│   └── index.ts          # geminiKey writable store
+│   └── index.ts          # geminiKey, aiIngredientsEnabled, toastMessage, confirmDialog writable stores + showSuccess(), showConfirm() helpers
 └── components/
-    ├── CalendarTab.svelte
-    ├── MenuTab.svelte
-    ├── StatsTab.svelte
-    ├── SettingsTab.svelte
-    └── PromptsTab.svelte
+    ├── CalendarTab.svelte     # Planner Module (PLN)
+    ├── MenuTab.svelte         # Inventory Module (INV)
+    ├── SettingsTab.svelte     # Settings Module (SET)
+    ├── StatsTab.svelte        # (레거시 — +page.svelte에서 사용하지 않음, Analytics 참고용)
+    ├── ChatTab.svelte         # (레거시 — +page.svelte에서 사용하지 않음, 채팅 참고용)
+    ├── AlertSuccess.svelte    # COM-001: 우상단 toast 알림 (전역)
+    ├── AlertConfirm.svelte    # COM-002: 삭제 확인 다이얼로그 (전역)
+    ├── ModalNewEntrySelection.svelte  # INV-004: 단품/콤보 선택 모달
+    ├── ModalMenuRegistry.svelte       # INV-002: 단품 메뉴 등록 모달
+    └── ModalComboRegistry.svelte      # INV-003: 콤보 등록 모달
 ```
 
 **Import 규칙:**
 - 타입 → `$lib/types/models` 또는 `$lib/types/ui` (또는 배럴 `$lib/types`)
 - HTTP 인프라 → `$lib/services/db`
-- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts}`
+- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts|combos}`
 - AI → `$lib/services/gemini` (순수 API) 또는 `$lib/services/mealService` (도메인)
-- 상태 → `$lib/stores` (`geminiKey` store, prop drilling 없음)
+- 상태 → `$lib/stores` (`geminiKey`, `toastMessage`, `confirmDialog` store + `showSuccess()`, `showConfirm()` helpers)
+- **`PUBLIC_GEMINI_API_KEY` env var는 .env에 없으므로 `$env/static/public`에서 import 금지 — `$geminiKey` store만 사용**
 
 ### SQLite Schema (auto-created in `main.cjs`)
 
@@ -223,27 +240,66 @@ src/lib/
 | `categories` | `id`, `name`, `color`, `sort_order` | Menu categories |
 | `menu_items` | `id`, `name`, `category_id`, `ingredients` (JSON array) | FK → categories (SET NULL on delete) |
 | `meal_data` | `date` (UNIQUE), `menus` (JSON array of MealEntry objects) | Upsert on conflict. MealEntry = `{ name, category_id, color }`. Old string[] data is normalized on fetch. |
-| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | Gemini prompt templates, seeded at startup |
+| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | AI 프롬프트 (코드에서 항상 갱신). IDs: `chat_base`, `ingredient_suggest`, `auto_gen`, `menu_recommend`, `combo_suggest` |
+| `combos` | `id`, `name`, `description`, `is_active` | 콤보 메뉴 |
+| `combo_items` | `combo_id`, `menu_item_id` (PK 복합) | 콤보↔단품 매핑, CASCADE DELETE |
 
 ### Tab Components
 
 Single-page app with tab-based navigation in `src/routes/+page.svelte`. The active tab is tracked with a local `activeTab` variable — no router.
 
-| Tab component | Purpose |
-|---|---|
-| `CalendarTab.svelte` | Monthly calendar view + right panel for daily meal selection + AI chat |
-| `MenuTab.svelte` | Full CRUD for menu items (card grid) |
-| `StatsTab.svelte` | Category/ingredient statistics dashboard |
-| `SettingsTab.svelte` | API key, category management, general settings |
-| `PromptsTab.svelte` | Prompt CRUD (system prompts: json_parser, chat_base, auto_gen) |
+| Tab id | Component | Purpose |
+|---|---|---|
+| `planner` | `CalendarTab.svelte` | Planner Module: 월간 캘린더 + 큐레이션 패널 (더블클릭 배정/삭제, AI 추천 콤보 모달) |
+| `inventory` | `MenuTab.svelte` | Inventory Module: 단품+콤보 통합 관리, 3종 등록 모달 + 콤보 편집 모달, 사용/비사용 필터 |
+| `settings` | `SettingsTab.svelte` | Settings Module: API 키, 카테고리 관리, AI 추천 콤보 수 설정 |
+
+**Planner 인터랙션:**
+- 날짜 단일클릭 → 선택 + 패널 열기
+- 패널 메뉴 더블클릭 → 선택 날짜에 즉시 배정
+- 캘린더 셀 메뉴 태그 더블클릭 → 즉시 삭제
+- Panel 토글 버튼 or 우측 chevron → 패널 접기/펼치기
+- 패널 하단 "AI 추천" 버튼 → AI 추천 콤보 모달 (날짜 선택 필수)
+
+**AI 추천 콤보 모달 구조 (CalendarTab):**
+- 헤더: "AI 추천 콤보" + 오늘 날짜 pill + 닫기
+- 3주 이력 dot-grid: 7열 × 3행, 각 날짜에 카테고리 색상 dot 표시. 오늘 강조. hover tooltip으로 식단명 확인.
+- 옵션 카드 2열 그리드: 제목·설명·메뉴 태그. 클릭으로 선택.
+- 액션바: "날짜 배정" + "콤보 등록". 등록된 옵션은 "등록됨" 뱃지 + 버튼 비활성, 모달 유지.
+- 동일 메뉴 구성 콤보 중복 등록 방지 (`hasDuplicateComposition()`)
+
+**Inventory 주요 동작:**
+- 메뉴 카드: 비활성 시 "비활성" 오버레이 표시 (이미지 영역)
+- 콤보 카드: 비활성 아이템 포함 시 "비활성 포함" 빨간 뱃지 + opacity-60 + 해당 태그 line-through
+- 콤보 카드: 구성 메뉴 전체 표시 (slice/+N 없음)
+- edit·delete 버튼: 모든 카드 우측 상단에 그룹으로 hover 시 표시
+- 사용/비사용 필터: `activeFilter` ("all"/"active"/"inactive") — select 드롭다운
+- 기본 밀도: XS (density=1). SM(density=2)까지만. 더 큰 사이즈 제거.
+
+> `PromptsTab.svelte` deleted (functionality merged into SettingsTab).
 
 ### Gemini AI Integration
 
+3가지 AI 기능 + 보조 기능으로 구성:
+
+| 기능 | 진입점 | 서비스 함수 | 프롬프트 ID |
+|---|---|---|---|
+| **AI 추천 콤보** (N가지 콤보 후보) | CalendarTab → AI 추천 버튼 | `askGemini()` | `auto_gen` |
+| **메뉴 추천** (단품 추천) | MenuTab → AI 메뉴 추천 버튼 (예정) | `recommendMenus()` | `menu_recommend` |
+| **콤보 추천** (콤보 구성) | MenuTab → AI 콤보 추천 버튼 (예정) | `suggestCombos()` | `combo_suggest` |
+| 재료 자동 추천 (보조) | ModalMenuRegistry | `suggestIngredients()` | `ingredient_suggest` |
+
 - `gemini.ts` — `callGeminiText(prompt, systemInstruction, apiKey)`: 순수 API 호출, 도메인 지식 없음
-- `mealService.ts` — `askGemini()`, `convertMealText()`: DB 프롬프트 조회 + 메뉴 제약 주입
+- `mealService.ts` — AI 기능별 서비스 함수 (위 표 참조)
 - `mealGeneration.ts` — 날짜 창 계산, 점수 산출, 프롬프트 문자열 생성, 응답 파싱
 
-`geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. 환경변수 `PUBLIC_GEMINI_API_KEY`보다 런타임 키가 우선.
+**`auto_gen` 프롬프트 플레이스홀더:** `{count}` (설정값), `{availableMenusText}`, `{existingCombosText}`, `{recentMealsText}`. 출력 형식: `[콤보N]` 블록 (제목/설명/메뉴 라인). `aiRecommendCount` localStorage key (default 5, range 3–12).
+
+**프롬프트 관리:** `main.cjs` 시드에서 코드로 직접 관리 (항상 최신 버전으로 갱신). 사용자 편집 UI 없음.
+
+`geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$geminiKey`)만 사용.
+
+**Gemini model:** `gemini-2.5-flash-lite` (빠르고 가벼운 모델 사용)
 
 ### Environment Variables
 
@@ -256,6 +312,28 @@ PUBLIC_GEMINI_API_KEY=your_key_here
 ### Korean Text Search
 
 `src/lib/utils/hangul.ts` provides Korean phoneme decomposition for fuzzy search within the menu selection panel.
+
+### Design System
+
+The `docs/` directory is the design source of truth: mockup screens (`docs/*/`), `docs/PRD.md`, and `docs/14_design_system/DESIGN.md`. Key rules:
+
+- **No border lines** — use background color (tonal layering) for area separation, never `1px solid` borders
+- **Organic shapes** — `rounded-xl` / `rounded-full`, generous padding; avoid sharp corners
+- **Glassmorphism** — floating elements (modals, nav) use `backdrop-blur` + semi-transparency
+- **Fonts** — headings: `Plus Jakarta Sans`; body/data: `Inter`
+- **Color** — Primary: `#006e1c` (dark green), Primary Container: `#4caf50` (light green)
+
+Before implementing any UI change, check the relevant screen mockup in `docs/`.
+
+### Tailwind CSS Setup (v3)
+
+Tailwind CSS v3 is installed as a PostCSS plugin. Config files:
+- `tailwind.config.js` — color tokens, font families (`headline`/`body`/`label`), border-radius
+- `postcss.config.js` — `tailwindcss` + `autoprefixer`
+- `src/app.css` — `@tailwind base/components/utilities` directives + `.glass-panel`, `.signature-gradient` utilities
+- `src/app.html` — Google Fonts (Plus Jakarta Sans, Inter) + Material Symbols Outlined icons
+
+Custom color tokens mirror the design system exactly (e.g. `bg-surface`, `bg-surface-container-low`, `text-primary`, etc).
 
 ### Build Notes
 
