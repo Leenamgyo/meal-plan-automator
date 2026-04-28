@@ -6,6 +6,43 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] - 2026-04-28
+
+> **백엔드 전면 재구조화** — `main.cjs` 단일 파일을 `server/` 레이어 + GraphQL + TypeScript로 분해. UI/기능 표면은 변하지 않음. 자세한 배경은 [`docs/ARCHITECTURE/BACKEND_SEPARATION_PLAN.md`](./docs/ARCHITECTURE/BACKEND_SEPARATION_PLAN.md).
+
+### Added
+- **`server/` TypeScript 백엔드 레이어** — 분리된 책임:
+  - `server/db/` — connection / schema (DDL 상수) / migrations
+  - `server/seed/` — 6종 프롬프트 시드 + UPSERT
+  - `server/repositories/` — 5개 Repository (Category/MenuItem/MealData/Prompt/Combo) + `getRepos()` 팩토리(db identity 캐싱)
+  - `server/graphql/` — SDL 스키마 + 단일 resolvers + graphql-http 핸들러 + GraphQLContext
+  - `server/http/static.ts` — SPA fallback 정적 파일 서버
+  - `server/index.ts` — `startServer()` 부트스트랩
+  - `server/types.ts` — 도메인 타입 + DTO
+- **GraphQL 단일 엔드포인트** (`POST /graphql`) — 10 Query + 14 Mutation. REST `/api/*` 대체. `graphql` + `graphql-http` + `@graphql-tools/schema` 도입.
+- **프론트 GraphQL 클라이언트** — `src/lib/services/graphql.ts` 자체 미니 클라이언트(~30줄). `gql<T>(query, variables)` API.
+- **Repository 패턴** — prepared statement 생성자 캐싱, `Database.Database` 직접 주입(테스트용). resolver는 `repos.<entity>.<method>()`만 호출.
+- **`scripts/seed.ts`** — GraphQL mutation 기반 시드 스크립트 (`npm run seed`). 기존 `scripts/seed.js` 대체.
+- **서버 단위 테스트** — `node:test` + `tsx`로 11개 `*.test.ts` 파일 (~1000줄). repository / resolver / schema / 정적 서버 / migrations 커버. `npm test`, `npm run test:watch`.
+- **`server/__tests__/testDb.ts`** — in-memory SQLite 헬퍼 (`createTestDb()`).
+- **TypeScript 빌드 파이프라인** — `tsconfig.server.json` (CJS 출력), `dist-server/` 산출, `dist-server/package.json` 매니페스트로 ESM/CJS 격리. `@types/node`, `@types/better-sqlite3`, `tsx` devDep 추가.
+- **NPM 스크립트**: `build:server`, `seed`, `test`, `test:watch`. `build`는 client + server 양쪽 빌드.
+
+### Changed
+- **Electron 진입점**: `main.cjs` → `dist-server/main.js` (TypeScript 컴파일 산출물).
+- **`main.ts` 대폭 슬림화**: 593줄 → **54줄**. Electron 라이프사이클(DB init/close + startServer + BrowserWindow)만 담당. HTTP·DB·GraphQL 로직은 모두 `server/`로 이동.
+- **프론트 services**: REST `apiGet/apiPost/apiPut/apiDelete` → GraphQL `gql<T>()`. 외부 시그니처(함수명/인자/반환 타입) 무변경 — 컴포넌트 호출부 수정 불필요.
+- **`features/<x>/api.ts`** — `services/*` re-export로 단일 소스화 (Task #6 후 services/ → features/ 이동 예정).
+- **에러 표현 표준화**: REST 404/409 → GraphQL `GraphQLError({ extensions: { code: 'NOT_FOUND'/'CONFLICT' } })`.
+- **`getDb()` 자동 복구**: macOS activate 시 DB 닫혀있으면 `initDatabase()` 자동 호출 (Repository는 `getRepos()`로 새 인스턴스 받음).
+
+### Removed
+- **REST 엔드포인트** — `/api/categories`, `/api/menu-items`, `/api/meal-data`, `/api/prompts`, `/api/combos` 모두 제거 (CRUD 4메서드 × 5리소스).
+- **dead code 파일** — `main.cjs`, `server/http/helpers.cjs`(REST 전용 parseBody/sendJSON/CORS), `src/lib/services/db.ts`, `src/lib/shared/api/client.ts` 삭제. 기존 `.cjs` 8개 모두 제거 (TS 전환).
+- **`scripts/seed.js`** — `scripts/seed.ts`로 대체.
+
+---
+
 ## [0.2.0] - 2026-03-01
 
 ### Added

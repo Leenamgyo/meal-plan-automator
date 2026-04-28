@@ -14,11 +14,21 @@ npm run dev
 # Development: build + run Electron app (full stack)
 npm start
 
-# Build SvelteKit static output only (+ fixes asset paths for Electron)
+# Build SvelteKit static + TypeScript server (full pipeline)
 npm run build
 
-# Seed dummy data (requires app running on port 3737)
-node scripts/seed.js
+# Build only TypeScript server → dist-server/
+npm run build:server
+
+# Build only SvelteKit static output (+ fixes asset paths for Electron)
+npm run build:client
+
+# Seed dummy data via GraphQL (requires app running on port 3737)
+npm run seed
+
+# Run server unit tests (Node 22 test runner via tsx)
+npm test
+npm run test:watch
 
 # Package as distributable
 npm run dist
@@ -27,19 +37,20 @@ npm run dist
 node clear-storage.js
 ```
 
-There are no lint or test commands configured in this project.
+`npm test`는 `server/**/*.test.ts`를 `node:test` + `tsx`로 실행한다. 별도 테스트 프레임워크는 사용하지 않는다.
 
 ## CLAUDE.md 업데이트 규칙
 
 **모든 기능 구현 완료 후**, 아래 체크리스트를 확인하고 해당하는 항목이 있으면 **즉시 이 파일을 업데이트**한다:
 
 - [ ] 디렉토리 구조 또는 파일 위치 변경 (이동, 신규, 삭제)
-- [ ] 새 서비스 / 유틸 / 스토어 추가
+- [ ] 새 서비스 / 유틸 / 스토어 / Repository 추가
 - [ ] import 규칙 변경 (어떤 모듈에서 무엇을 가져와야 하는지)
 - [ ] 아키텍처 레이어 책임 변경 (예: 도메인 로직이 다른 파일로 이동)
 - [ ] 탭 컴포넌트 추가 / 제거
 - [ ] 환경변수 또는 빌드 프로세스 변경
-- [ ] `Frontend Source Structure` 섹션의 파일 목록이 실제와 일치하는지 확인
+- [ ] GraphQL 스키마 (Query/Mutation/Type) 추가/변경
+- [ ] `Frontend Source Structure` / `Backend Source Structure` 섹션의 파일 목록이 실제와 일치하는지 확인
 - [ ] `SQLite Schema` 섹션이 실제 테이블 구조와 일치하는지 확인
 
 > **원칙:** 코드를 고쳤으면, CLAUDE.md도 같이 고친다. PR 반영 전 CLAUDE.md가 최신 상태인지 항상 검증한다.
@@ -98,10 +109,11 @@ When committing a meaningful batch of changes:
 | 코드 작성 / 수정 / 리팩토링 | **Claude Code** | 파일 편집, 실행, 검증까지 직접 처리 |
 | 단계별 구현 계획 수립 | **Claude Code** | 작은 단위 기능은 직접 계획하고 실행 |
 | 대규모 아키텍처 설계 | **Gemini** | 전체 구조를 넓은 컨텍스트로 한 번에 파악 |
-| `main.cjs` 전체 분석 | **Gemini** | 단일 파일이지만 크기가 커서 전체 로딩 유리 |
+| `server/` 전체 흐름 분석 | **Gemini** | resolvers + repositories + db 여러 파일 교차 추적 |
 | Electron IPC / 프로세스 간 버그 | **Gemini** | main ↔ renderer 흐름을 한번에 추적 |
 | Svelte 컴포넌트 간 상태 버그 | **Gemini** | 여러 파일의 반응성 흐름을 동시에 분석 |
-| SQLite 스키마 ↔ 클라이언트 불일치 | **Gemini** | `main.cjs` + `db.ts` 동시 비교 |
+| SQLite 스키마 ↔ 클라이언트 불일치 | **Gemini** | `server/db/schema.ts` + `server/types.ts` + `src/lib/types/models.ts` 동시 비교 |
+| GraphQL 스키마 ↔ resolver ↔ repository 불일치 | **Gemini** | `schema.ts` + `resolvers.ts` + `repositories/*` 교차 검증 |
 | 2회 이상 반복되는 디버깅 | **Gemini** | 동일 오류 반복 시 Claude가 아닌 Gemini에 위임 |
 | 코드 리뷰 / 엣지케이스 점검 | **Gemini** | 변경 파일 전체를 한 번에 넘겨서 검토 |
 | Gemini 프롬프트 튜닝 | **Gemini** | `prompts` 테이블 + `gemini.ts`를 같이 분석 |
@@ -126,7 +138,7 @@ When committing a meaningful batch of changes:
 계획 확인 후 사용자 승인 받고 구현 시작.
 
 ```
-use gemini to analyze @src/ @main.cjs and create an implementation plan for: [기능 설명]
+use gemini to analyze @src/ @server/ @main.ts and create an implementation plan for: [기능 설명]
 ```
 
 #### 🐛 Debug — 동일 오류 2회 이상 반복 시
@@ -151,42 +163,119 @@ use gemini to review @[변경된파일들] — check for bugs, edge cases, and E
 ### Project-specific Gemini 프롬프트 패턴
 
 ```
-# Electron IPC 이슈
-use gemini to analyze @main.cjs — focus on IPC handlers and renderer communication
+# Electron 라이프사이클 이슈
+use gemini to analyze @main.ts @server/index.ts — focus on init order and renderer communication
 
 # Svelte 반응성 버그
 use gemini to trace state flow in @src/routes/ @src/lib/ — find reactivity issues
 
 # SQLite 스키마 불일치
-use gemini to compare schema in @main.cjs with client usage in @src/lib/services/
+use gemini to compare @server/db/schema.ts @server/types.ts @src/lib/types/models.ts — find shape mismatches
+
+# GraphQL 레이어 이슈
+use gemini to cross-check @server/graphql/schema.ts @server/graphql/resolvers.ts @server/repositories/ — verify resolver/repo coverage
 
 # Gemini 프롬프트 개선
-use gemini to suggest improvements for prompts in @src/lib/services/mealService.ts — reference prompts table structure
+use gemini to suggest improvements for @server/seed/prompts.ts — reference auto_gen / day_plan_options / menu_recommend / combo_suggest
 ```
 
 ---
 
 ## Architecture
 
-This is an **Electron desktop app** wrapping a **SvelteKit static site**, with all backend logic embedded in the Electron main process.
+This is an **Electron desktop app** wrapping a **SvelteKit static site**. 백엔드는 **TypeScript로 작성한 `server/` 레이어**가 담당하며, Electron main process에서 임베드 HTTP 서버 + GraphQL로 노출된다.
 
 ### Process Separation
 
-- **`main.cjs`** — Electron main process (CommonJS). Runs two things at startup:
-  1. An embedded HTTP server on `http://127.0.0.1:3737` that serves both the `/api/*` REST endpoints and the SvelteKit static build from `./build/`.
-  2. A `BrowserWindow` that loads `http://127.0.0.1:3737/`.
+- **`main.ts`** — Electron 라이프사이클 진입점 (54줄, TypeScript). 컴파일 후 `dist-server/main.js`로 산출. 시작 시:
+  1. `initDatabase()` — better-sqlite3 커넥션 + 스키마 + 시드
+  2. `startServer()` — `server/index.ts`의 부트스트랩 호출 (HTTP 서버 + `/graphql` 라우팅)
+  3. `BrowserWindow`가 `http://127.0.0.1:3737/`을 로드
+- **`server/`** — 백엔드 로직 (TypeScript, CJS 컴파일). 단일 백엔드 진입점은 `POST /graphql`. REST API는 v0.3.0에서 제거됨.
 - **`preload.js`** — Minimal Electron preload script.
-- **`src/`** — SvelteKit frontend compiled to static output via `adapter-static`. Communicates with the backend only through HTTP calls to the local server.
+- **`src/`** — SvelteKit frontend compiled to static output via `adapter-static`. 백엔드와는 GraphQL(`/graphql`)로만 통신.
+
+### Build Pipeline (TypeScript → CJS)
+
+루트 `package.json`은 `"type": "module"` (SvelteKit), 그러나 `server/` + `main.ts`는 `tsc`로 CJS 산출:
+
+```
+main.ts                          → dist-server/main.js
+server/**/*.ts                   → dist-server/server/**/*.js
++ dist-server/package.json {"type":"commonjs"}    # ESM 충돌 차단
+```
+
+- `tsconfig.server.json` — `module: CommonJS`, `target: ES2022`, strict, `outDir: ./dist-server`
+- Electron `main` 진입점은 `dist-server/main.js`
+- `__dirname`은 컴파일 후 `dist-server/server/`이므로 프로젝트 루트 참조 시 `path.resolve(__dirname, '..', '..')`
+- 테스트 파일(`server/**/*.test.ts`, `server/__tests__/**`)은 빌드에서 제외
 
 ### Data Flow
 
 ```
 SvelteKit UI (browser context)
-  ↕ fetch() to http://127.0.0.1:3737/api/*
-Embedded HTTP server (main.cjs)
-  ↕ better-sqlite3 (synchronous)
+  ↕ fetch() POST /graphql  → gql<T>(query, variables)
+Embedded HTTP server (server/index.ts)
+  ↕ graphql-http handler (server/graphql/index.ts)
+GraphQL resolvers (server/graphql/resolvers.ts)
+  ↕ context.repos
+Repository layer (server/repositories/*)
+  ↕ better-sqlite3 (synchronous, prepared statements)
 meal-chart.db (SQLite, in project root)
 ```
+
+### Backend Source Structure (`server/`)
+
+```
+server/
+├── index.ts                         # startServer() — HTTP 부트스트랩 (/graphql + 정적 fallback)
+├── config.ts                        # PORT(3737), DB_PATH, BUILD_DIR
+├── types.ts                         # 도메인 타입 (Category, MenuItem, MealEntry, MealData, Prompt, Combo) + DTO
+│
+├── db/
+│   ├── connection.ts                # initDatabase / getDb / isDbOpen / closeDatabase (싱글턴)
+│   ├── schema.ts                    # SCHEMA_DDL (6 테이블 CREATE 문자열)
+│   └── migrations.ts                # sort_order ALTER (idempotent)
+│
+├── seed/
+│   └── prompts.ts                   # seedPrompts(6종) + upsertPrompts(db) — 항상 코드 최신본으로 갱신
+│
+├── http/
+│   └── static.ts                    # serveStatic + getMimeType (build/ → SPA fallback to index.html)
+│
+├── graphql/
+│   ├── schema.ts                    # SDL typeDefs (10 Query + 14 Mutation)
+│   ├── resolvers.ts                 # Repository 위임 (단일 파일, ~185줄)
+│   ├── context.ts                   # GraphQLContext { repos }
+│   └── index.ts                     # makeExecutableSchema + graphql-http createHandler
+│
+├── repositories/
+│   ├── index.ts                     # createRepositories + getRepos (db identity 기반 캐싱)
+│   ├── categoryRepository.ts        # CRUD + sort_order 정렬
+│   ├── menuItemRepository.ts        # ingredients JSON ↔ string[] hydrate
+│   ├── mealDataRepository.ts        # date 기준 upsert
+│   ├── promptRepository.ts          # existsById (POST 충돌 검사)
+│   └── comboRepository.ts           # combos + combo_items 조인 hydrate
+│
+├── __tests__/
+│   └── testDb.ts                    # 테스트용 in-memory DB 헬퍼
+│
+└── **/*.test.ts                     # node:test + tsx 단위 테스트 (11 파일)
+```
+
+**엄격한 단방향 의존:** `main.ts` → `server/index` → `graphql/*` → `repositories/*` → `db/*`
+- resolvers가 db를 직접 import 금지
+- repository가 GraphQL 타입을 import 금지
+- repository는 HTTP/네트워크 지식 금지 (DB만 안다)
+
+### Backend Import 규칙
+
+- HTTP 부트스트랩 → `./server/index` (main.ts에서만 사용)
+- 도메인 타입 → `server/types`
+- DB 라이프사이클 → `server/db/connection` (`initDatabase`, `getDb`, `closeDatabase`)
+- Repository 사용 → `server/repositories` (`getRepos()` — context 주입, 테스트는 `createRepositories(testDb)` 직접 호출)
+- GraphQL 컨텍스트 타입 → `server/graphql/context`
+- 신규 SQL은 반드시 Repository 안에 작성. resolver/main에서 `db.prepare()` 직접 호출 금지.
 
 ### Frontend Source Structure
 
@@ -194,18 +283,24 @@ meal-chart.db (SQLite, in project root)
 src/lib/
 ├── types/
 │   ├── index.ts          # 모든 타입 re-export 진입점
-│   ├── models.ts         # DB 스키마 모델 (Category, MenuItem, MealRecord, MealEntry, Prompt)
+│   ├── models.ts         # DB 스키마 모델 (Category, MenuItem, MealRecord, MealEntry, Prompt, Combo)
 │   └── ui.ts             # UI 전용 타입 (Message, CalendarDay)
 ├── services/
-│   ├── db.ts             # 순수 HTTP 클라이언트 (apiGet, apiPost, apiPut, apiDelete)
-│   ├── categories.ts     # Category CRUD + localStorage 폴백
-│   ├── menuItems.ts      # MenuItem CRUD + localStorage 폴백
-│   ├── mealData.ts       # MealData CRUD + localStorage 폴백
-│   ├── prompts.ts        # Prompt CRUD + localStorage 폴백
-│   ├── combos.ts         # Combo CRUD (fetchCombos, createCombo, updateCombo, deleteCombo)
+│   ├── graphql.ts        # 미니 GraphQL 클라이언트 (gql<T>(query, variables) — POST /graphql)
+│   ├── categories.ts     # Category CRUD (GraphQL) + localStorage 폴백
+│   ├── menuItems.ts      # MenuItem CRUD (GraphQL) + localStorage 폴백
+│   ├── mealData.ts       # MealData CRUD (GraphQL upsert) + localStorage 폴백
+│   ├── prompts.ts        # Prompt CRUD (GraphQL) + localStorage 폴백
+│   ├── combos.ts         # Combo CRUD (GraphQL, items 중첩 query)
 │   ├── gemini.ts         # 순수 Gemini API 클라이언트 (callGeminiText)
 │   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, recommendMenus, suggestCombos, suggestIngredients)
 │   └── mealGeneration.ts # AI 추천 순수 함수 (점수 계산, 프롬프트 빌드)
+├── features/             # Feature-based 진입점 (services/* re-export — Task #6 후 services/ 이동 예정)
+│   ├── category/api.ts
+│   ├── menu/api.ts
+│   ├── meal/api.ts
+│   ├── combo/api.ts
+│   └── ai/prompts.ts
 ├── utils/
 │   ├── hangul.ts         # 한글 초성 검색 (hangulIncludes)
 │   ├── calendarUtils.ts  # 달력 날짜 계산 (buildCalendarDays, dateKey, isToday)
@@ -227,22 +322,25 @@ src/lib/
 
 **Import 규칙:**
 - 타입 → `$lib/types/models` 또는 `$lib/types/ui` (또는 배럴 `$lib/types`)
-- HTTP 인프라 → `$lib/services/db`
-- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts|combos}`
+- GraphQL 인프라 → `$lib/services/graphql` (`gql<T>()`만 export. 도메인 지식 없음)
+- 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts|combos}` (GraphQL query/mutation 캡슐화)
 - AI → `$lib/services/gemini` (순수 API) 또는 `$lib/services/mealService` (도메인)
 - 상태 → `$lib/stores` (`geminiKey`, `toastMessage`, `confirmDialog` store + `showSuccess()`, `showConfirm()` helpers)
 - **`PUBLIC_GEMINI_API_KEY` env var는 .env에 없으므로 `$env/static/public`에서 import 금지 — `$geminiKey` store만 사용**
+- 신규 백엔드 호출은 반드시 services 함수에 추가. 컴포넌트에서 `gql()` 직접 호출 금지.
 
-### SQLite Schema (auto-created in `main.cjs`)
+### SQLite Schema (defined in `server/db/schema.ts`)
 
 | Table | Key columns | Notes |
 |---|---|---|
 | `categories` | `id`, `name`, `color`, `sort_order` | Menu categories |
 | `menu_items` | `id`, `name`, `category_id`, `ingredients` (JSON array) | FK → categories (SET NULL on delete) |
 | `meal_data` | `date` (UNIQUE), `menus` (JSON array of MealEntry objects) | Upsert on conflict. MealEntry = `{ name, category_id, color }`. Old string[] data is normalized on fetch. |
-| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | AI 프롬프트 (코드에서 항상 갱신). IDs: `chat_base`, `ingredient_suggest`, `auto_gen`, `menu_recommend`, `combo_suggest` |
+| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | AI 프롬프트 (코드에서 항상 갱신). IDs: `chat_base`, `ingredient_suggest`, `auto_gen`, `day_plan_options`, `menu_recommend`, `combo_suggest` |
 | `combos` | `id`, `name`, `description`, `is_active` | 콤보 메뉴 |
 | `combo_items` | `combo_id`, `menu_item_id` (PK 복합) | 콤보↔단품 매핑, CASCADE DELETE |
+
+스키마 변경 시 `server/db/schema.ts`의 `SCHEMA_DDL` 상수를 수정하고, 호환성이 필요하면 `server/db/migrations.ts`에 idempotent ALTER를 추가한다.
 
 ### Tab Components
 
@@ -295,7 +393,7 @@ Single-page app with tab-based navigation in `src/routes/+page.svelte`. The acti
 
 **`auto_gen` 프롬프트 플레이스홀더:** `{count}` (설정값), `{availableMenusText}`, `{existingCombosText}`, `{recentMealsText}`. 출력 형식: `[콤보N]` 블록 (제목/설명/메뉴 라인). `aiRecommendCount` localStorage key (default 5, range 3–12).
 
-**프롬프트 관리:** `main.cjs` 시드에서 코드로 직접 관리 (항상 최신 버전으로 갱신). 사용자 편집 UI 없음.
+**프롬프트 관리:** `server/seed/prompts.ts`에서 코드로 직접 관리 (항상 최신 버전으로 갱신). 사용자 편집 UI 없음. 앱 부팅 시 `upsertPrompts(db)`가 모든 프롬프트를 ON CONFLICT UPDATE로 갱신.
 
 `geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$geminiKey`)만 사용.
 
@@ -337,4 +435,10 @@ Custom color tokens mirror the design system exactly (e.g. `bg-surface`, `bg-sur
 
 ### Build Notes
 
-The `npm run build` script patches `build/index.html` after the SvelteKit build to convert absolute `/_app` paths to relative `./_app` paths, which is required for Electron's file loading to work correctly.
+`npm run build`는 두 단계로 동작:
+1. **`build:client`** — `vite build` 후 `build/index.html`의 절대 경로(`/_app`)를 상대 경로(`./_app`)로 patch (Electron `file://` 로딩 호환).
+2. **`build:server`** — `tsc -p tsconfig.server.json`으로 TS → CJS 컴파일 (산출물: `dist-server/`). 직후 `dist-server/package.json`을 `{"type":"commonjs"}`로 작성해 루트의 `"type":"module"`과 격리.
+
+Electron `main` 진입점은 `dist-server/main.js`이므로 `npm start` 전 반드시 `build:server`가 완료되어야 한다.
+
+테스트 실행: `npm test` — `node:test` 러너가 `tsx` import hook 기반으로 TS 테스트 직접 실행. 별도 빌드 불필요.
