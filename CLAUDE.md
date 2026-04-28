@@ -93,94 +93,6 @@ When committing a meaningful batch of changes:
 
 스킬 파일 위치: `.claude/commands/`
 
----
-
-## AI Collaboration Workflow
-
-이 프로젝트는 **Claude Code**와 **Gemini MCP**를 함께 사용한다.  
-각자의 강점이 다르므로, 작업 성격에 따라 아래 기준으로 역할을 나눈다.
-
----
-
-### 역할 분담 기준
-
-| 작업 유형 | 담당 | 이유 |
-|---|---|---|
-| 코드 작성 / 수정 / 리팩토링 | **Claude Code** | 파일 편집, 실행, 검증까지 직접 처리 |
-| 단계별 구현 계획 수립 | **Claude Code** | 작은 단위 기능은 직접 계획하고 실행 |
-| 대규모 아키텍처 설계 | **Gemini** | 전체 구조를 넓은 컨텍스트로 한 번에 파악 |
-| `server/` 전체 흐름 분석 | **Gemini** | resolvers + repositories + db 여러 파일 교차 추적 |
-| Electron IPC / 프로세스 간 버그 | **Gemini** | main ↔ renderer 흐름을 한번에 추적 |
-| Svelte 컴포넌트 간 상태 버그 | **Gemini** | 여러 파일의 반응성 흐름을 동시에 분석 |
-| SQLite 스키마 ↔ 클라이언트 불일치 | **Gemini** | `server/db/schema.ts` + `server/types.ts` + `src/lib/types/models.ts` 동시 비교 |
-| GraphQL 스키마 ↔ resolver ↔ repository 불일치 | **Gemini** | `schema.ts` + `resolvers.ts` + `repositories/*` 교차 검증 |
-| 2회 이상 반복되는 디버깅 | **Gemini** | 동일 오류 반복 시 Claude가 아닌 Gemini에 위임 |
-| 코드 리뷰 / 엣지케이스 점검 | **Gemini** | 변경 파일 전체를 한 번에 넘겨서 검토 |
-| Gemini 프롬프트 튜닝 | **Gemini** | `prompts` 테이블 + `gemini.ts`를 같이 분석 |
-
----
-
-### Claude Code가 직접 처리하는 것
-
-- 파일 생성 / 수정 / 삭제
-- npm 스크립트 실행 및 빌드 확인
-- 명확한 요구사항의 기능 구현 (Svelte 컴포넌트, API 엔드포인트, DB 쿼리 등)
-- 에러 로그 해석 및 1~2회 이내의 단순 디버깅
-- CHANGELOG / package.json 버전 관리
-
----
-
-### Gemini에 넘기는 시점과 방법
-
-#### 📋 Plan First — 새 기능 구현 전
-
-새 탭, 새 기능, 아키텍처 변경 전에 계획을 먼저 받는다.  
-계획 확인 후 사용자 승인 받고 구현 시작.
-
-```
-use gemini to analyze @src/ @server/ @main.ts and create an implementation plan for: [기능 설명]
-```
-
-#### 🐛 Debug — 동일 오류 2회 이상 반복 시
-
-같은 에러가 두 번 이상 반복되면 즉시 Gemini에 위임. 추측으로 계속 시도하지 않는다.
-
-```
-use gemini to debug this error in @[관련파일]:
-[에러메시지 전체]
-```
-
-#### 👀 Review — 작업 완료 전 최종 점검
-
-태스크를 완료로 표시하기 전에 변경된 파일을 Gemini로 리뷰한다.
-
-```
-use gemini to review @[변경된파일들] — check for bugs, edge cases, and Electron/SvelteKit-specific issues
-```
-
----
-
-### Project-specific Gemini 프롬프트 패턴
-
-```
-# Electron 라이프사이클 이슈
-use gemini to analyze @main.ts @server/index.ts — focus on init order and renderer communication
-
-# Svelte 반응성 버그
-use gemini to trace state flow in @src/routes/ @src/lib/ — find reactivity issues
-
-# SQLite 스키마 불일치
-use gemini to compare @server/db/schema.ts @server/types.ts @src/lib/types/models.ts — find shape mismatches
-
-# GraphQL 레이어 이슈
-use gemini to cross-check @server/graphql/schema.ts @server/graphql/resolvers.ts @server/repositories/ — verify resolver/repo coverage
-
-# Gemini 프롬프트 개선
-use gemini to suggest improvements for @server/seed/prompts.ts — reference auto_gen / day_plan_options / menu_recommend / combo_suggest
-```
-
----
-
 ## Architecture
 
 This is an **Electron desktop app** wrapping a **SvelteKit static site**. 백엔드는 **TypeScript로 작성한 `server/` 레이어**가 담당하며, Electron main process에서 임베드 HTTP 서버 + GraphQL로 노출된다.
@@ -378,26 +290,21 @@ Single-page app with tab-based navigation in `src/routes/+page.svelte`. The acti
 
 ### Gemini AI Integration
 
-3가지 AI 기능 + 보조 기능으로 구성:
+현재 활성 AI 기능은 **재료 자동 추천(보조)** 1건. 다른 식단 추천 기능은 v0.4 작업으로 제거됨.
 
 | 기능 | 진입점 | 서비스 함수 | 프롬프트 ID |
 |---|---|---|---|
-| **AI 추천 콤보** (N가지 콤보 후보) | CalendarTab → AI 추천 버튼 | `askGemini()` | `auto_gen` |
-| **메뉴 추천** (단품 추천) | MenuTab → AI 메뉴 추천 버튼 (예정) | `recommendMenus()` | `menu_recommend` |
-| **콤보 추천** (콤보 구성) | MenuTab → AI 콤보 추천 버튼 (예정) | `suggestCombos()` | `combo_suggest` |
-| 재료 자동 추천 (보조) | ModalMenuRegistry | `suggestIngredients()` | `ingredient_suggest` |
+| 재료 자동 추천 | `ModalMenuRegistry.svelte` | `suggestIngredients()` | `ingredient_suggest` |
 
 - `gemini.ts` — `callGeminiText(prompt, systemInstruction, apiKey)`: 순수 API 호출, 도메인 지식 없음
-- `mealService.ts` — AI 기능별 서비스 함수 (위 표 참조)
-- `mealGeneration.ts` — 날짜 창 계산, 점수 산출, 프롬프트 문자열 생성, 응답 파싱
+- `mealService.ts` — `suggestIngredients()`만 active. `askGemini`/`recommendMenus`/`suggestCombos`는 dead code (정리 대기)
+- `mealGeneration.ts` — dead code (정리 대기)
 
-**`auto_gen` 프롬프트 플레이스홀더:** `{count}` (설정값), `{availableMenusText}`, `{existingCombosText}`, `{recentMealsText}`. 출력 형식: `[콤보N]` 블록 (제목/설명/메뉴 라인). `aiRecommendCount` localStorage key (default 5, range 3–12).
-
-**프롬프트 관리:** `server/seed/prompts.ts`에서 코드로 직접 관리 (항상 최신 버전으로 갱신). 사용자 편집 UI 없음. 앱 부팅 시 `upsertPrompts(db)`가 모든 프롬프트를 ON CONFLICT UPDATE로 갱신.
+**프롬프트 관리:** `server/seed/prompts.ts`에서 코드로 직접 관리. 앱 부팅 시 `upsertPrompts(db)`가 ON CONFLICT UPDATE로 갱신. 현재 활성 ID: `chat_base`, `ingredient_suggest`. 나머지 4개(`auto_gen`, `day_plan_options`, `menu_recommend`, `combo_suggest`)는 dead seed (정리 대기).
 
 `geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$geminiKey`)만 사용.
 
-**Gemini model:** `gemini-2.5-flash-lite` (빠르고 가벼운 모델 사용)
+**Gemini model:** `gemini-2.5-flash-lite`
 
 ### Environment Variables
 

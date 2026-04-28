@@ -1,22 +1,23 @@
-새 기능 구현 전 Gemini로 아키텍처 계획을 수립한다.
+새 기능/탭/아키텍처 변경 구현 전에 단계별 계획을 수립한다.
 
 기능 설명: $ARGUMENTS
 
-다음 순서로 진행한다:
+## 진행 순서
 
-1. `git status`로 현재 작업 상태를 먼저 확인한다.
-2. Gemini에 전체 소스와 기능 설명을 넘겨 구현 계획을 요청한다:
+1. `git status`로 현재 작업 상태를 확인한다.
 
-```
-use gemini to analyze @src/ @main.cjs and create a step-by-step implementation plan for: $ARGUMENTS
+2. 관련 코드를 파악한다:
+   - 도메인 진입점: `src/lib/components/`, `server/repositories/`, `server/graphql/`
+   - 의존 규칙: `docs/conventions/frontend.md`, `docs/conventions/backend.md`
+   - 현재 아키텍처: `docs/ARCHITECTURE.md`
 
-Focus on:
-- Which files need to be created or modified
-- Where in the src/lib/ layer structure (types/models, types/ui, services/, utils/, stores/, components/) each piece belongs
-- Import rules to follow ($lib/types, $lib/services, $lib/stores)
-- Any SQLite schema changes needed in main.cjs
-- Potential edge cases or Electron/SvelteKit-specific concerns
-```
+3. 다음 항목을 명시적으로 결정해서 사용자에게 제시한다:
+   - 어떤 파일이 신규/수정/삭제되는지
+   - 프론트는 `src/lib/{types,services,utils,stores,components}/` 중 어디에 들어가는지
+   - 백엔드는 `server/{db,seed,repositories,graphql,http}/` 중 어디에 들어가는지
+   - GraphQL 스키마 변경(Query/Mutation/Type) 여부
+   - SQLite 스키마 변경(`server/db/schema.ts` SCHEMA_DDL) 여부
+   - import 규칙 영향
+   - 엣지케이스 / Electron-SvelteKit 특이사항
 
-3. Gemini의 계획을 사용자에게 명확하게 정리해서 보여준다.
 4. 사용자 승인을 받은 후에만 구현을 시작한다.
