@@ -88,6 +88,7 @@ When committing a meaningful batch of changes:
 | `/debug [에러]` | 동일 오류 **2회 이상** 반복 시 | 에러 메시지 (필수) |
 | `/release [patch\|minor\|major]` | 의미 있는 변경 묶음 **완료 후** | 타입 생략 시 자동 판단 |
 | `/feat [기능명]` | 새 기능 작업 **시작 시** — 이슈 생성 + feature 브랜치 생성 + TODO.md 추가 | 기능명 (필수) |
+| `/commit [push]` | feature 브랜치 없이 **지금 상태를 바로 커밋**하고 싶을 때 (main 포함) | `push` 생략 시 커밋만, 포함 시 push까지 |
 | `/pr` | feature 브랜치 작업 **완료 후** — build → commit → push → PR 생성 (`Closes #N` 자동 포함) | PR 추가 설명 (선택) |
 | `/done [이슈번호]` | PR 병합 후 — 이슈 닫기 + TODO.md 완료 처리 | 이슈 번호 (필수) |
 
@@ -150,7 +151,10 @@ server/
 │   └── migrations.ts                # sort_order ALTER (idempotent)
 │
 ├── seed/
-│   └── prompts.ts                   # seedPrompts(6종) + upsertPrompts(db) — 항상 코드 최신본으로 갱신
+│   ├── prompts.ts                   # prompts/*.md 로더 + upsertPrompts(db) — 로직만 담당, 프롬프트 본문은 없음
+│   └── prompts/                     # 프롬프트 본문 (마크다운, frontmatter에 description)
+│       ├── chat_base.md
+│       └── ingredient_suggest.md
 │
 ├── http/
 │   └── static.ts                    # serveStatic + getMimeType (build/ → SPA fallback to index.html)
@@ -204,21 +208,15 @@ src/lib/
 │   ├── mealData.ts       # MealData CRUD (GraphQL upsert) + localStorage 폴백
 │   ├── prompts.ts        # Prompt CRUD (GraphQL) + localStorage 폴백
 │   ├── combos.ts         # Combo CRUD (GraphQL, items 중첩 query)
-│   ├── gemini.ts         # 순수 Gemini API 클라이언트 (callGeminiText)
-│   ├── mealService.ts    # 식단 도메인 AI 함수 (askGemini, recommendMenus, suggestCombos, suggestIngredients)
+│   ├── ai.ts            # 순수 AI 텍스트 생성 클라이언트 (callAiText, 현재 Gemini 연동)
+│   ├── mealService.ts    # 식단 도메인 AI 함수 (askAi, recommendMenus, suggestCombos, suggestIngredients)
 │   └── mealGeneration.ts # AI 추천 순수 함수 (점수 계산, 프롬프트 빌드)
-├── features/             # Feature-based 진입점 (services/* re-export — Task #6 후 services/ 이동 예정)
-│   ├── category/api.ts
-│   ├── menu/api.ts
-│   ├── meal/api.ts
-│   ├── combo/api.ts
-│   └── ai/prompts.ts
 ├── utils/
 │   ├── hangul.ts         # 한글 초성 검색 (hangulIncludes)
 │   ├── calendarUtils.ts  # 달력 날짜 계산 (buildCalendarDays, dateKey, isToday)
 │   └── arrayUtils.ts     # 배열 순서 변경 (moveItemUp, moveItemDown, swapItems)
 ├── stores/
-│   └── index.ts          # geminiKey, aiIngredientsEnabled, toastMessage, confirmDialog writable stores + showSuccess(), showConfirm() helpers
+│   └── index.ts          # aiApiKey, aiIngredientsEnabled, toastMessage, confirmDialog writable stores + showSuccess(), showConfirm() helpers
 └── components/
     ├── CalendarTab.svelte     # Planner Module (PLN)
     ├── MenuTab.svelte         # Inventory Module (INV)
@@ -236,9 +234,9 @@ src/lib/
 - 타입 → `$lib/types/models` 또는 `$lib/types/ui` (또는 배럴 `$lib/types`)
 - GraphQL 인프라 → `$lib/services/graphql` (`gql<T>()`만 export. 도메인 지식 없음)
 - 엔티티 CRUD → `$lib/services/{categories|menuItems|mealData|prompts|combos}` (GraphQL query/mutation 캡슐화)
-- AI → `$lib/services/gemini` (순수 API) 또는 `$lib/services/mealService` (도메인)
-- 상태 → `$lib/stores` (`geminiKey`, `toastMessage`, `confirmDialog` store + `showSuccess()`, `showConfirm()` helpers)
-- **`PUBLIC_GEMINI_API_KEY` env var는 .env에 없으므로 `$env/static/public`에서 import 금지 — `$geminiKey` store만 사용**
+- AI → `$lib/services/ai` (순수 API) 또는 `$lib/services/mealService` (도메인)
+- 상태 → `$lib/stores` (`aiApiKey`, `toastMessage`, `confirmDialog` store + `showSuccess()`, `showConfirm()` helpers)
+- **`PUBLIC_GEMINI_API_KEY` env var는 .env에 없으므로 `$env/static/public`에서 import 금지 — `$aiApiKey` store만 사용**
 - 신규 백엔드 호출은 반드시 services 함수에 추가. 컴포넌트에서 `gql()` 직접 호출 금지.
 
 ### SQLite Schema (defined in `server/db/schema.ts`)
@@ -248,7 +246,7 @@ src/lib/
 | `categories` | `id`, `name`, `color`, `sort_order` | Menu categories |
 | `menu_items` | `id`, `name`, `category_id`, `ingredients` (JSON array) | FK → categories (SET NULL on delete) |
 | `meal_data` | `date` (UNIQUE), `menus` (JSON array of MealEntry objects) | Upsert on conflict. MealEntry = `{ name, category_id, color }`. Old string[] data is normalized on fetch. |
-| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | AI 프롬프트 (코드에서 항상 갱신). IDs: `chat_base`, `ingredient_suggest`, `auto_gen`, `day_plan_options`, `menu_recommend`, `combo_suggest` |
+| `prompts` | `id` (TEXT PK), `content`, `version`, `is_active` | AI 프롬프트 (`server/seed/prompts/*.md`에서 항상 갱신). IDs: `chat_base`, `ingredient_suggest` |
 | `combos` | `id`, `name`, `description`, `is_active` | 콤보 메뉴 |
 | `combo_items` | `combo_id`, `menu_item_id` (PK 복합) | 콤보↔단품 매핑, CASCADE DELETE |
 
@@ -296,13 +294,16 @@ Single-page app with tab-based navigation in `src/routes/+page.svelte`. The acti
 |---|---|---|---|
 | 재료 자동 추천 | `ModalMenuRegistry.svelte` | `suggestIngredients()` | `ingredient_suggest` |
 
-- `gemini.ts` — `callGeminiText(prompt, systemInstruction, apiKey)`: 순수 API 호출, 도메인 지식 없음
-- `mealService.ts` — `suggestIngredients()`만 active. `askGemini`/`recommendMenus`/`suggestCombos`는 dead code (정리 대기)
+- `ai.ts` — `callAiText(prompt, systemInstruction, apiKey)`: 순수 API 호출, 도메인 지식 없음
+- `mealService.ts` — `suggestIngredients()`만 active. `askAi`/`recommendMenus`/`suggestCombos`는 dead code (정리 대기)
 - `mealGeneration.ts` — dead code (정리 대기)
 
-**프롬프트 관리:** `server/seed/prompts.ts`에서 코드로 직접 관리. 앱 부팅 시 `upsertPrompts(db)`가 ON CONFLICT UPDATE로 갱신. 현재 활성 ID: `chat_base`, `ingredient_suggest`. 나머지 4개(`auto_gen`, `day_plan_options`, `menu_recommend`, `combo_suggest`)는 dead seed (정리 대기).
+**프롬프트 관리:** 프롬프트 본문(비즈니스 로직)은 `server/seed/prompts/*.md`에 파일 하나당 하나씩 관리한다 (frontmatter에 `description`, 본문은 프롬프트 텍스트). `server/seed/prompts.ts`는 이 디렉토리를 읽어 `seedPrompts` 배열을 구성하는 로더 역할만 하며 프롬프트 텍스트 자체는 갖지 않는다. 앱 부팅 시 `upsertPrompts(db)`가 ON CONFLICT UPDATE로 DB에 갱신한다. 현재 파일: `chat_base.md`, `ingredient_suggest.md`.
 
-`geminiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$geminiKey`)만 사용.
+- **신규 프롬프트 추가 시:** `server/seed/prompts/{id}.md` 파일을 새로 만들면 자동으로 `seedPrompts`에 포함된다 (별도 코드 수정 불필요). `id`는 파일명(확장자 제외)이 된다.
+- **빌드 시 주의:** `.md` 파일은 `tsc`가 복사하지 않으므로 `build:server` 스크립트가 `dist-server/server/seed/prompts/`로 별도 복사한다 (Build Notes 참고).
+
+`aiApiKey`는 localStorage에 저장되며 `$lib/stores`의 writable store로 관리. `.env`에 `PUBLIC_GEMINI_API_KEY`가 없으므로 런타임 키(`$aiApiKey`)만 사용.
 
 **Gemini model:** `gemini-2.5-flash-lite`
 
@@ -320,7 +321,7 @@ PUBLIC_GEMINI_API_KEY=your_key_here
 
 ### Design System
 
-The `docs/` directory is the design source of truth: mockup screens (`docs/*/`), `docs/PRD.md`, and `docs/14_design_system/DESIGN.md`. Key rules:
+The `docs/screens/design-system-palette/` directory (`feature.md` + `ui.html`) is the design source of truth. Key rules:
 
 - **No border lines** — use background color (tonal layering) for area separation, never `1px solid` borders
 - **Organic shapes** — `rounded-xl` / `rounded-full`, generous padding; avoid sharp corners
@@ -328,7 +329,7 @@ The `docs/` directory is the design source of truth: mockup screens (`docs/*/`),
 - **Fonts** — headings: `Plus Jakarta Sans`; body/data: `Inter`
 - **Color** — Primary: `#006e1c` (dark green), Primary Container: `#4caf50` (light green)
 
-Before implementing any UI change, check the relevant screen mockup in `docs/`.
+Before implementing any UI change, check `docs/screens/design-system-palette/`.
 
 ### Tailwind CSS Setup (v3)
 
@@ -344,7 +345,7 @@ Custom color tokens mirror the design system exactly (e.g. `bg-surface`, `bg-sur
 
 `npm run build`는 두 단계로 동작:
 1. **`build:client`** — `vite build` 후 `build/index.html`의 절대 경로(`/_app`)를 상대 경로(`./_app`)로 patch (Electron `file://` 로딩 호환).
-2. **`build:server`** — `tsc -p tsconfig.server.json`으로 TS → CJS 컴파일 (산출물: `dist-server/`). 직후 `dist-server/package.json`을 `{"type":"commonjs"}`로 작성해 루트의 `"type":"module"`과 격리.
+2. **`build:server`** — `tsc -p tsconfig.server.json`으로 TS → CJS 컴파일 (산출물: `dist-server/`). 직후 `dist-server/package.json`을 `{"type":"commonjs"}`로 작성해 루트의 `"type":"module"`과 격리하고, `server/seed/prompts/*.md`를 `dist-server/server/seed/prompts/`로 복사 (tsc는 `.md`를 컴파일하지 않으므로 별도 처리 필요).
 
 Electron `main` 진입점은 `dist-server/main.js`이므로 `npm start` 전 반드시 `build:server`가 완료되어야 한다.
 

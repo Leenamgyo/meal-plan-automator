@@ -1,12 +1,12 @@
 /**
- * Gemini API 클라이언트 — 도메인 지식 없는 순수 API 래퍼
+ * AI 텍스트 생성 클라이언트 — 도메인 지식 없는 순수 API 래퍼 (현재 Gemini 연동)
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const MODEL = "gemini-2.5-flash-lite";
 
-function rethrowGeminiError(error: unknown): never {
+function rethrowAiError(error: unknown): never {
     if (error instanceof Error && error.message.includes("429")) {
         throw new Error("Gemini API 무료 요청 할당량을 초과했습니다. 잠시 후(약 1분) 다시 시도해주세요.");
     }
@@ -14,9 +14,9 @@ function rethrowGeminiError(error: unknown): never {
 }
 
 /**
- * 주어진 systemInstruction과 prompt로 Gemini를 호출하고 텍스트 응답을 반환
+ * 주어진 systemInstruction과 prompt로 AI를 호출하고 텍스트 응답을 반환
  */
-export async function callGeminiText(
+export async function callAiText(
     prompt: string,
     systemInstruction: string,
     apiKey: string,
@@ -30,6 +30,6 @@ export async function callGeminiText(
         const result = await model.generateContent(prompt);
         return result.response.text().trim();
     } catch (error: unknown) {
-        rethrowGeminiError(error);
+        rethrowAiError(error);
     }
 }

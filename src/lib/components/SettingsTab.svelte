@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { geminiKey } from "$lib/stores";
+    import { aiApiKey } from "$lib/stores";
     import {
         createCategory,
         deleteCategory,
@@ -68,7 +68,7 @@
 
     // ── Profile save ─────────────────────────────────────────
     async function saveSettings() {
-        localStorage.setItem("geminiKey", $geminiKey);
+        localStorage.setItem("aiApiKey", $aiApiKey);
         localStorage.setItem("restaurantName", restaurantName);
         localStorage.setItem("restaurantDesc", restaurantDesc);
         localStorage.setItem("aiRecommendCount", String(aiRecommendCount));
@@ -211,7 +211,7 @@
                             <input
                                 type="password"
                                 class="w-full bg-surface-container-lowest rounded-xl py-3.5 pl-12 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none font-mono border-none"
-                                bind:value={$geminiKey}
+                                bind:value={$aiApiKey}
                                 placeholder="Enter your Gemini API key..."
                             />
                         </div>

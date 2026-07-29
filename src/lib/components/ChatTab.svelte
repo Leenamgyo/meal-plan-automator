@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { askGemini } from "$lib/services/mealService";
-    import { geminiKey } from "$lib/stores";
+    import { askAi } from "$lib/services/mealService";
+    import { aiApiKey } from "$lib/stores";
 
     // (레거시 컴포넌트 — 현재 +page.svelte에서 사용하지 않음)
 
@@ -20,7 +20,7 @@
         inputText = "";
         messages = [...messages, { role: "user", text: userMsg }];
 
-        const apiKey = $geminiKey;
+        const apiKey = $aiApiKey;
         if (!apiKey) {
             messages = [
                 ...messages,
@@ -35,7 +35,7 @@
         isConverting = true;
 
         try {
-            const aiResponse = await askGemini(userMsg, apiKey);
+            const aiResponse = await askAi(userMsg, apiKey);
             messages = [...messages, { role: "ai", text: aiResponse }];
         } catch (error: any) {
             console.error(error);

@@ -7,12 +7,12 @@
     import CalendarTab from "$lib/components/CalendarTab.svelte";
     import AlertSuccess from "$lib/components/AlertSuccess.svelte";
     import AlertConfirm from "$lib/components/AlertConfirm.svelte";
-    import { geminiKey, aiIngredientsEnabled } from "$lib/stores";
+    import { aiApiKey, aiIngredientsEnabled } from "$lib/stores";
 
     let activeTab = "planner";
 
     onMount(() => {
-        geminiKey.set(localStorage.getItem("geminiKey") || "");
+        aiApiKey.set(localStorage.getItem("aiApiKey") || "");
         const stored = localStorage.getItem("aiIngredientsEnabled");
         aiIngredientsEnabled.set(stored === null ? true : stored === "true");
     });

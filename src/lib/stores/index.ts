@@ -3,8 +3,8 @@
  */
 import { writable } from "svelte/store";
 
-/** Gemini API 키 — SettingsTab에서 쓰고, CalendarTab에서 읽습니다. */
-export const geminiKey = writable<string>("");
+/** AI API 키 (현재 Gemini) — SettingsTab에서 쓰고, CalendarTab에서 읽습니다. */
+export const aiApiKey = writable<string>("");
 
 /** 메뉴 등록 시 AI 재료 자동 추천 on/off */
 export const aiIngredientsEnabled = writable<boolean>(true);

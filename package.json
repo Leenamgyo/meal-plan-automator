@@ -6,7 +6,7 @@
   "main": "dist-server/main.js",
   "scripts": {
     "dev": "vite dev",
-    "build:server": "tsc -p tsconfig.server.json && echo '{\"type\":\"commonjs\"}' > dist-server/package.json",
+    "build:server": "tsc -p tsconfig.server.json && echo '{\"type\":\"commonjs\"}' > dist-server/package.json && mkdir -p dist-server/server/seed/prompts && cp server/seed/prompts/*.md dist-server/server/seed/prompts/",
     "build:client": "vite build && sed -i '' 's/\"\\/_app/\"\\.\\/_app/g' build/index.html && sed -i '' 's/href=\"\\/_app/href=\"\\.\\/_app/g' build/index.html",
     "build": "npm run build:client && npm run build:server",
     "preview": "vite preview",

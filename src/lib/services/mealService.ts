@@ -1,6 +1,6 @@
 /**
  * 식단 도메인 AI 서비스
- * Gemini API 클라이언트(gemini.ts)를 사용하는 3가지 AI 기능 구현
+ * AI 클라이언트(ai.ts)를 사용하는 3가지 AI 기능 구현
  *
  * Feature 1: PLAN NOW       — auto_gen 프롬프트, CalendarTab.autoGenerateMeal()에서 사용
  * Feature 2: 메뉴 추천       — menu_recommend 프롬프트, recommendMenus() 사용
@@ -8,7 +8,7 @@
  * 보조:      재료 자동 추천   — ingredient_suggest 프롬프트, suggestIngredients() 사용
  */
 
-import { callGeminiText } from "$lib/services/gemini";
+import { callAiText } from "$lib/services/ai";
 import type { MenuItem, Category, Prompt } from "$lib/types/models";
 import { buildAvailableMenusText } from "$lib/services/mealGeneration";
 
@@ -28,7 +28,7 @@ function getSystemInstruction(prompts: Prompt[] | undefined): string {
  * CalendarTab.svelte의 autoGenerateMeal()에서 직접 호출
  * 프롬프트 컨텍스트 조립은 CalendarTab에서 처리 (frequencyData, availableMenusText, recentMealsText 치환 후 전달)
  */
-export async function askGemini(
+export async function askAi(
     prompt: string,
     apiKey: string,
     availableMenus?: string[],
@@ -39,7 +39,7 @@ export async function askGemini(
             ? getSystemInstruction(prompts) + MENU_CONSTRAINT(availableMenus)
             : getSystemInstruction(prompts);
 
-    return callGeminiText(prompt, systemInstruction, apiKey);
+    return callAiText(prompt, systemInstruction, apiKey);
 }
 
 // ── Feature 2: 메뉴 추천 ───────────────────────────────────────────────────
@@ -65,7 +65,7 @@ export async function recommendMenus(
         .replace("{recentMealsText}", recentMealsText);
 
     const allMenuNames = menuItems.map((m) => m.name);
-    const raw = await callGeminiText(
+    const raw = await callAiText(
         promptText,
         getSystemInstruction(prompts),
         apiKey,
@@ -101,7 +101,7 @@ export async function suggestCombos(
         availableMenusText,
     );
 
-    return callGeminiText(promptText, getSystemInstruction(prompts), apiKey);
+    return callAiText(promptText, getSystemInstruction(prompts), apiKey);
 }
 
 // ── 보조: 재료 자동 추천 ───────────────────────────────────────────────────
@@ -118,7 +118,7 @@ export async function suggestIngredients(
         prompts?.find((p) => p.id === "ingredient_suggest")?.content ??
         "당신은 요리 전문가입니다. 메뉴 이름을 받으면 해당 요리의 주요 재료를 한국어로 나열합니다. 재료 이름만 쉼표로 구분하여 한 줄로 응답하세요. 다른 설명은 하지 마세요.";
 
-    const raw = await callGeminiText(`재료 추천: ${menuName}`, base, apiKey);
+    const raw = await callAiText(`재료 추천: ${menuName}`, base, apiKey);
 
     return raw
         .split(/[,，\n]/)

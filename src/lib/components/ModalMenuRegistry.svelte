@@ -2,7 +2,7 @@
     import { createEventDispatcher } from "svelte";
     import { createMenuItem } from "$lib/services/menuItems";
     import { suggestIngredients } from "$lib/services/mealService";
-    import { geminiKey, aiIngredientsEnabled, showSuccess } from "$lib/stores";
+    import { aiApiKey, aiIngredientsEnabled, showSuccess } from "$lib/stores";
     import type { Category, MenuItem } from "$lib/types/models";
 
     export let categories: Category[] = [];
@@ -36,7 +36,7 @@
     }
 
     async function handleAiSuggest() {
-        const apiKey = $geminiKey;
+        const apiKey = $aiApiKey;
         if (!menuName.trim() || !apiKey || isAiLoading) return;
         isAiLoading = true;
         try {

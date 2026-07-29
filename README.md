@@ -46,7 +46,7 @@ GraphQL handler  →  Repositories  →  better-sqlite3
                                   meal-chart.db
 ```
 
-상세: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+상세: [`CLAUDE.md`](./CLAUDE.md)
 
 ## 환경변수
 
@@ -72,11 +72,10 @@ GraphQL handler  →  Repositories  →  better-sqlite3
 │   └── lib/
 │       ├── services/             # GraphQL 호출 (categories, menuItems, mealData, combos, prompts)
 │       ├── components/           # 탭 컴포넌트
-│       ├── features/             # Feature-based 진입점 (services/* re-export)
 │       ├── stores/               # Svelte writable stores
 │       └── utils/                # 한글 검색, 달력, 배열 유틸
 ├── scripts/seed.ts               # GraphQL 기반 시드 스크립트
-├── docs/                         # 아키텍처 / 컨벤션 / ADR
+├── docs/                         # 디자인 시스템 소스 (mockup screens)
 └── CHANGELOG.md
 ```
 
@@ -92,6 +91,4 @@ Electron `main` 진입점은 `dist-server/main.js`.
 ## 더 보기
 
 - [`CHANGELOG.md`](./CHANGELOG.md) — 버전별 변경
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — 백엔드/프론트 레이어, 의존 방향, 빌드
-- [`docs/conventions/`](./docs/conventions/) — 도메인별 작업 규칙
-- [`CLAUDE.md`](./CLAUDE.md) — AI 코딩 에이전트 진입점
+- [`CLAUDE.md`](./CLAUDE.md) — 아키텍처, 레이어 의존 방향, 빌드, AI 코딩 에이전트 진입점
